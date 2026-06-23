@@ -1,0 +1,16 @@
+# === SECRET FILES - NEVER UPLOAD THESE ===
+.env
+
+# === NODE MODULES - TOO LARGE TO UPLOAD ===
+node_modules/
+
+# === LOGS ===
+logs/*.log
+*.log
+
+# === OS FILES ===
+.DS_Store
+Thumbs.db
+
+# === EDITOR FILES ===
+.vscode/settings.json
