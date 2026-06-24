@@ -85,7 +85,7 @@ module.exports = {
         [interaction.guildId, sub, channel.id]);
       return interaction.reply({
         content: `✅ **${sub}** alerts will now be sent to ${channel}`,
-        ephemeral: true,
+        flags: 64,
       });
     }
 
@@ -98,7 +98,7 @@ module.exports = {
         [interaction.guildId, sub, role.id]);
       return interaction.reply({
         content: `✅ **${sub}** permission role set to ${role}`,
-        ephemeral: true,
+        flags: 64,
       });
     }
 
@@ -110,7 +110,7 @@ module.exports = {
         [interaction.guildId, allianceId]);
       return interaction.reply({
         content: `✅ Alliance ID set to **${allianceId}**`,
-        ephemeral: true,
+        flags: 64,
       });
     }
 
@@ -143,7 +143,7 @@ module.exports = {
         )
         .setTimestamp();
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: 64 });
     }
   },
 };

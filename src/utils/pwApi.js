@@ -1,17 +1,5 @@
 // ============================================================
 // src/utils/pwApi.js — Politics & War API client
-//
-// KEY FACTS from the official P&W GraphQL schema:
-//   - alliances() has NO name filter — only id:[Int]
-//   - nations() accepts nation_name:[String] (array, exact match only)
-//   - Both are case-sensitive on the server side
-//
-// Our solution:
-//   - Nations: send the name as-is; the API does exact match.
-//     Since we can't know the exact casing, we also try common
-//     variants (Title Case, UPPER, lower) in sequence.
-//   - Alliances: fetch pages of alliances and match client-side,
-//     fully case-insensitive using JavaScript .toLowerCase().
 // ============================================================
 
 const axios = require('axios');
@@ -24,11 +12,10 @@ const CACHE_TIMES = {
   alliance: 10 * 60 * 1000,
 };
 
-// Real member positions — excludes APPLICANT and NOALLIANCE
 const MEMBER_POSITIONS = ['MEMBER', 'OFFICER', 'HEIR', 'LEADER'];
 
 // ─────────────────────────────────────────────────────────────
-// CORE QUERY RUNNER
+// CORE QUERY RUNNER — logs full error details
 // ─────────────────────────────────────────────────────────────
 async function pwQuery(queryStr, variables = {}) {
   const url = `${PW_API_BASE}${process.env.PW_API_KEY}`;
@@ -37,9 +24,12 @@ async function pwQuery(queryStr, variables = {}) {
       headers: { 'Content-Type': 'application/json' },
       timeout: 15000,
     });
+
+    // Log the FULL error message so we can see what's wrong
     if (res.data.errors) {
-      logger.warn('P&W API errors:', JSON.stringify(res.data.errors));
+      logger.warn('P&W API errors: ' + JSON.stringify(res.data.errors, null, 2));
     }
+
     return res.data.data;
   } catch (err) {
     if (err.response?.status === 429) {
@@ -47,16 +37,17 @@ async function pwQuery(queryStr, variables = {}) {
       await new Promise(r => setTimeout(r, 60000));
       return pwQuery(queryStr, variables);
     }
-    logger.error('P&W API error:', err.message);
+    logger.error('P&W API HTTP error: ' + err.message);
+    if (err.response?.data) {
+      logger.error('Response body: ' + JSON.stringify(err.response.data));
+    }
     throw err;
   }
 }
 
 // ─────────────────────────────────────────────────────────────
 // SMART RESOLVERS
-// Accept: numeric ID  |  P&W URL  |  name (any casing)
 // ─────────────────────────────────────────────────────────────
-
 async function resolveNation(input) {
   if (!input) return null;
   input = input.trim();
@@ -84,13 +75,28 @@ async function getNation(nationId) {
   if (hit) return hit;
 
   const data = await pwQuery(`
-    query($id:[Int]) {
-      nations(id:$id, first:1) {
+    query GetNation($id: [Int]) {
+      nations(id: $id, first: 1) {
         data {
-          id nation_name leader_name alliance_id alliance_position
-          score num_cities color beige_turns vacation_mode_turns
-          soldiers tanks aircraft ships missiles nukes
-          offensive_wars_count defensive_wars_count last_active
+          id
+          nation_name
+          leader_name
+          alliance_id
+          alliance_position
+          score
+          num_cities
+          color
+          beige_turns
+          vacation_mode_turns
+          soldiers
+          tanks
+          aircraft
+          ships
+          missiles
+          nukes
+          offensive_wars_count
+          defensive_wars_count
+          last_active
           alliance { name }
         }
       }
@@ -103,35 +109,48 @@ async function getNation(nationId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// NATION — search by name (case-insensitive)
-//
-// The API's nation_name filter accepts an ARRAY of exact strings.
-// Strategy: send multiple casing variants in one request,
-// then pick the one whose lowercase matches the user's input.
+// NATION — search by name
+// Sends multiple casing variants in one call since the API
+// does exact-match only. We pick the right result client-side.
 // ─────────────────────────────────────────────────────────────
 async function searchNationByName(name) {
   const key = `nation_name_${name.toLowerCase()}`;
   const hit = getFromCache(key);
   if (hit) return hit;
 
-  // Build casing variants
   const variants = dedupe([
-    name,                          // as typed
-    name.toLowerCase(),            // all lowercase
-    name.toUpperCase(),            // ALL CAPS
-    toTitleCase(name),             // Title Case
-    toSentenceCase(name),          // Sentence case
+    name,
+    name.toLowerCase(),
+    name.toUpperCase(),
+    toTitleCase(name),
+    toSentenceCase(name),
   ]);
 
-  // Send all variants in a single API call (nation_name accepts an array)
+  logger.debug(`Searching nation by name variants: ${variants.join(', ')}`);
+
   const data = await pwQuery(`
-    query($names:[String]) {
-      nations(nation_name:$names, first:10) {
+    query SearchNation($names: [String]) {
+      nations(nation_name: $names, first: 10) {
         data {
-          id nation_name leader_name alliance_id alliance_position
-          score num_cities color beige_turns vacation_mode_turns
-          soldiers tanks aircraft ships missiles nukes
-          offensive_wars_count defensive_wars_count last_active
+          id
+          nation_name
+          leader_name
+          alliance_id
+          alliance_position
+          score
+          num_cities
+          color
+          beige_turns
+          vacation_mode_turns
+          soldiers
+          tanks
+          aircraft
+          ships
+          missiles
+          nukes
+          offensive_wars_count
+          defensive_wars_count
+          last_active
           alliance { name }
         }
       }
@@ -139,13 +158,12 @@ async function searchNationByName(name) {
   `, { names: variants });
 
   const results = data?.nations?.data || [];
+  logger.debug(`Nation name search returned ${results.length} results`);
+
   if (results.length === 0) return null;
 
   const target = name.toLowerCase();
-
-  // Prefer exact case-insensitive match, fall back to first result
-  const nation = results.find(n => n.nation_name.toLowerCase() === target)
-              || results[0];
+  const nation = results.find(n => n.nation_name.toLowerCase() === target) || results[0];
 
   setCache(key, nation, CACHE_TIMES.nation);
   return nation;
@@ -160,9 +178,15 @@ async function getAllianceInfo(allianceId) {
   if (hit) return hit;
 
   const data = await pwQuery(`
-    query($id:[Int]) {
-      alliances(id:$id, first:1) {
-        data { id name score color num_nations }
+    query GetAlliance($id: [Int]) {
+      alliances(id: $id, first: 1) {
+        data {
+          id
+          name
+          score
+          color
+
+        }
       }
     }
   `, { id: [parseInt(allianceId)] });
@@ -173,13 +197,11 @@ async function getAllianceInfo(allianceId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ALLIANCE — search by name (case-insensitive, client-side)
+// ALLIANCE — search by name, fully client-side
 //
-// The alliances() query has NO name filter in the schema.
-// We must fetch pages of alliances and match locally.
-// P&W has ~1000+ alliances. We fetch sorted by score DESC
-// so the most well-known alliances appear first.
-// We page through up to 200 results (4 pages of 50).
+// The P&W alliances() query has NO name filter in the schema.
+// We must page through alliances and match locally.
+// We fetch up to 4 pages of 50 = 200 alliances.
 // ─────────────────────────────────────────────────────────────
 async function searchAllianceByName(name) {
   const key = `alliance_name_${name.toLowerCase()}`;
@@ -187,36 +209,69 @@ async function searchAllianceByName(name) {
   if (hit) return hit;
 
   const target = name.toLowerCase().trim();
-  let page = 1;
+  logger.debug(`Searching alliances client-side for: "${target}"`);
+
   let found = null;
+  let page = 1;
 
   while (page <= 4 && !found) {
+    logger.debug(`Fetching alliance page ${page}...`);
+
     const data = await pwQuery(`
-      query($page:Int) {
-        alliances(first:50, page:$page) {
-          data { id name score color num_nations }
-          paginatorInfo { hasMorePages }
+      query GetAlliancePage($page: Int) {
+        alliances(first: 50, page: $page) {
+          data {
+            id
+            name
+            score
+            color
+  
+          }
+          paginatorInfo {
+            hasMorePages
+            currentPage
+            total
+          }
         }
       }
     `, { page });
 
-    const alliances = data?.alliances?.data || [];
-    const hasMore   = data?.alliances?.paginatorInfo?.hasMorePages;
+    const alliances  = data?.alliances?.data || [];
+    const hasMore    = data?.alliances?.paginatorInfo?.hasMorePages;
+    const total      = data?.alliances?.paginatorInfo?.total;
 
-    // Try exact match first
+    logger.debug(`Page ${page}: got ${alliances.length} alliances (total in DB: ${total}, hasMore: ${hasMore})`);
+
+    // Log first few names on page 1 so we can confirm data is coming through
+    if (page === 1) {
+      logger.debug('First 5 alliance names: ' + alliances.slice(0, 5).map(a => a.name).join(', '));
+    }
+
+    // Exact match (case-insensitive)
     found = alliances.find(a => a.name.toLowerCase() === target);
+    if (found) { logger.debug(`Exact match found: ${found.name}`); break; }
 
-    // Then "starts with"
-    if (!found) found = alliances.find(a => a.name.toLowerCase().startsWith(target));
+    // Starts-with match
+    found = alliances.find(a => a.name.toLowerCase().startsWith(target));
+    if (found) { logger.debug(`Starts-with match found: ${found.name}`); break; }
 
-    // Then "includes"
-    if (!found) found = alliances.find(a => a.name.toLowerCase().includes(target));
+    // Contains match
+    found = alliances.find(a => a.name.toLowerCase().includes(target));
+    if (found) { logger.debug(`Contains match found: ${found.name}`); break; }
 
-    if (!hasMore) break;
+    if (!hasMore) {
+      logger.debug('No more pages — alliance not found');
+      break;
+    }
     page++;
   }
 
-  if (found) setCache(key, found, CACHE_TIMES.alliance);
+  if (found) {
+    setCache(key, found, CACHE_TIMES.alliance);
+  } else {
+    logger.warn(`Alliance "${name}" not found after searching ${page} page(s)`);
+  }
+
   return found || null;
 }
 
@@ -229,15 +284,26 @@ async function getAllianceMembers(allianceId) {
   if (hit) return hit;
 
   const data = await pwQuery(`
-    query($id:[Int]) {
-      alliances(id:$id, first:1) {
+    query GetMembers($id: [Int]) {
+      alliances(id: $id, first: 1) {
         data {
-          id name
+          id
+          name
           nations {
-            id nation_name score num_cities alliance_position
-            soldiers tanks aircraft ships
-            beige_turns vacation_mode_turns
-            offensive_wars_count defensive_wars_count last_active
+            id
+            nation_name
+            score
+            num_cities
+            alliance_position
+            soldiers
+            tanks
+            aircraft
+            ships
+            beige_turns
+            vacation_mode_turns
+            offensive_wars_count
+            defensive_wars_count
+            last_active
           }
         }
       }
@@ -249,7 +315,7 @@ async function getAllianceMembers(allianceId) {
     MEMBER_POSITIONS.includes((n.alliance_position || '').toUpperCase())
   );
 
-  logger.debug(`Alliance ${allianceId}: ${all.length} total, ${members.length} members, ${all.length - members.length} applicants excluded`);
+  logger.debug(`Alliance ${allianceId}: ${all.length} total nations, ${members.length} actual members, ${all.length - members.length} applicants excluded`);
   setCache(key, members, CACHE_TIMES.alliance);
   return members;
 }
@@ -259,16 +325,24 @@ async function getAllianceMembers(allianceId) {
 // ─────────────────────────────────────────────────────────────
 async function getNationWars(nationId) {
   const data = await pwQuery(`
-    query($id:[ID]) {
-      wars(nation_id:$id, active:true) {
-        id date attid defid att_alliance_id def_alliance_id
-        attacker { nation_name score }
-        defender { nation_name score }
-        status turnsleft
+    query GetWars($id: [Int]) {
+      wars(nation_id: $id, active: true, first: 10) {
+        data {
+          id
+          date
+          attid
+          defid
+          att_alliance_id
+          def_alliance_id
+          attacker { nation_name score }
+          defender { nation_name score }
+          status
+          turnsleft
+        }
       }
     }
-  `, { id: [String(nationId)] });
-  return data?.wars || [];
+  `, { id: [parseInt(nationId)] });
+  return data?.wars?.data || [];
 }
 
 // ─────────────────────────────────────────────────────────────

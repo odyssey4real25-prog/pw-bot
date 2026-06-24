@@ -112,10 +112,10 @@ module.exports = {
       // Only military+ can create assignments
       const { checkPermission } = require('../../utils/permissions');
       if (!checkPermission(interaction, 'military')) {
-        return interaction.reply({ content: '❌ You need the Military Officer role to assign targets.', ephemeral: true });
+        return interaction.reply({ content: '❌ You need the Military Officer role to assign targets.', flags: 64 });
       }
 
-      await interaction.deferReply({ ephemeral: false });
+      await interaction.deferReply();
 
       const targetInput = interaction.options.getString('target');
       const member = interaction.options.getUser('member');
@@ -183,7 +183,7 @@ module.exports = {
     if (sub === 'list') {
       const { checkPermission } = require('../../utils/permissions');
       if (!checkPermission(interaction, 'military')) {
-        return interaction.reply({ content: '❌ You need the Military Officer role to view all assignments.', ephemeral: true });
+        return interaction.reply({ content: '❌ You need the Military Officer role to view all assignments.', flags: 64 });
       }
 
       const filter = interaction.options.getString('filter') || 'active';
@@ -205,7 +205,7 @@ module.exports = {
       }
 
       if (assignments.length === 0) {
-        return interaction.reply({ content: `📋 No assignments found for filter: **${filter}**.`, ephemeral: true });
+        return interaction.reply({ content: `📋 No assignments found for filter: **${filter}**.`, flags: 64 });
       }
 
       const statusEmoji = {
@@ -227,14 +227,14 @@ module.exports = {
         .setFooter({ text: 'Use /assign cancel [id] to cancel | /assign complete [id] to complete' })
         .setTimestamp();
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: 64 });
     }
 
     // ── CANCEL ──────────────────────────────────────────────
     if (sub === 'cancel') {
       const { checkPermission } = require('../../utils/permissions');
       if (!checkPermission(interaction, 'military')) {
-        return interaction.reply({ content: '❌ You need the Military Officer role to cancel assignments.', ephemeral: true });
+        return interaction.reply({ content: '❌ You need the Military Officer role to cancel assignments.', flags: 64 });
       }
 
       const id = interaction.options.getInteger('id');
@@ -243,13 +243,13 @@ module.exports = {
         [id, interaction.guildId]
       );
 
-      if (!assignment) return interaction.reply({ content: `❌ Assignment #${id} not found.`, ephemeral: true });
+      if (!assignment) return interaction.reply({ content: `❌ Assignment #${id} not found.`, flags: 64 });
       if (['completed', 'cancelled'].includes(assignment.status)) {
-        return interaction.reply({ content: `❌ Assignment #${id} is already **${assignment.status}**.`, ephemeral: true });
+        return interaction.reply({ content: `❌ Assignment #${id} is already **${assignment.status}**.`, flags: 64 });
       }
 
       run(`UPDATE target_assignments SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?`, [id]);
-      return interaction.reply({ content: `✅ Assignment **#${id}** (${assignment.target_nation_name}) has been cancelled.`, ephemeral: true });
+      return interaction.reply({ content: `✅ Assignment **#${id}** (${assignment.target_nation_name}) has been cancelled.`, flags: 64 });
     }
 
     // ── ACCEPT ──────────────────────────────────────────────
@@ -260,15 +260,15 @@ module.exports = {
         [id, interaction.guildId, interaction.user.id]
       );
 
-      if (!assignment) return interaction.reply({ content: `❌ Assignment #${id} not found or not assigned to you.`, ephemeral: true });
+      if (!assignment) return interaction.reply({ content: `❌ Assignment #${id} not found or not assigned to you.`, flags: 64 });
       if (assignment.status !== 'assigned') {
-        return interaction.reply({ content: `❌ Assignment #${id} is already **${assignment.status}**.`, ephemeral: true });
+        return interaction.reply({ content: `❌ Assignment #${id} is already **${assignment.status}**.`, flags: 64 });
       }
 
       run(`UPDATE target_assignments SET status = 'accepted', updated_at = datetime('now') WHERE id = ?`, [id]);
       return interaction.reply({
         content: `✅ You accepted assignment **#${id}** — Target: **[${assignment.target_nation_name}](https://politicsandwar.com/nation/id=${assignment.target_nation_id})**\nGood luck! Use \`/assign complete ${id}\` when done.`,
-        ephemeral: true,
+        flags: 64,
       });
     }
 
@@ -280,8 +280,8 @@ module.exports = {
         [id, interaction.guildId, interaction.user.id]
       );
 
-      if (!assignment) return interaction.reply({ content: `❌ Assignment #${id} not found or not assigned to you.`, ephemeral: true });
-      if (assignment.status === 'completed') return interaction.reply({ content: `✅ Assignment #${id} is already marked complete.`, ephemeral: true });
+      if (!assignment) return interaction.reply({ content: `❌ Assignment #${id} not found or not assigned to you.`, flags: 64 });
+      if (assignment.status === 'completed') return interaction.reply({ content: `✅ Assignment #${id} is already marked complete.`, flags: 64 });
 
       run(`UPDATE target_assignments SET status = 'completed', updated_at = datetime('now') WHERE id = ?`, [id]);
       return interaction.reply({
@@ -301,7 +301,7 @@ module.exports = {
       ).rows;
 
       if (assignments.length === 0) {
-        return interaction.reply({ content: '📋 You have no active assignments.', ephemeral: true });
+        return interaction.reply({ content: '📋 You have no active assignments.', flags: 64 });
       }
 
       const statusEmoji = { assigned: '📌', accepted: '✅', in_progress: '⚔️', completed: '🏆' };
@@ -317,7 +317,7 @@ module.exports = {
         .setFooter({ text: 'Use /assign accept [id] or /assign complete [id]' })
         .setTimestamp();
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: 64 });
     }
   },
 };

@@ -19,7 +19,7 @@ module.exports = {
         if (!hasPermission) {
           return interaction.reply({
             content: '❌ You do not have permission to use this command.',
-            ephemeral: true,
+            flags: 64,
           });
         }
       }
@@ -28,7 +28,7 @@ module.exports = {
         await command.execute(interaction, client);
       } catch (error) {
         logger.error(`Error in /${interaction.commandName}:`, error);
-        const msg = { content: '❌ Something went wrong. The error has been logged.', ephemeral: true };
+        const msg = { content: '❌ Something went wrong. The error has been logged.', flags: 64 };
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp(msg);
         } else {

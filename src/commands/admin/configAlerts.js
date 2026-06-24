@@ -62,14 +62,14 @@ module.exports = {
         content: enabled
           ? '✅ You will now receive beige alerts via DM.'
           : '✅ You will no longer receive beige alerts via DM.',
-        ephemeral: true,
+        flags: 64,
       });
     }
 
     // Admin-only: set intervals
     if (sub === 'intervals') {
       if (!interaction.member.permissions.has('Administrator')) {
-        return interaction.reply({ content: '❌ Only administrators can change alert intervals.', ephemeral: true });
+        return interaction.reply({ content: '❌ Only administrators can change alert intervals.', flags: 64 });
       }
 
       const raw = interaction.options.getString('minutes');
@@ -79,7 +79,7 @@ module.exports = {
         .sort((a, b) => b - a); // Highest first
 
       if (intervals.length === 0) {
-        return interaction.reply({ content: '❌ No valid intervals found. Example: `60,30,15,5`', ephemeral: true });
+        return interaction.reply({ content: '❌ No valid intervals found. Example: `60,30,15,5`', flags: 64 });
       }
 
       run(
@@ -91,7 +91,7 @@ module.exports = {
 
       return interaction.reply({
         content: `✅ Beige alert intervals set to: **${intervals.join(', ')} minutes** before expiry.`,
-        ephemeral: true,
+        flags: 64,
       });
     }
 
@@ -118,7 +118,7 @@ module.exports = {
         )
         .setTimestamp();
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: 64 });
     }
   },
 };

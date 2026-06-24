@@ -57,7 +57,7 @@ module.exports = {
 
     // ── ADD ─────────────────────────────────────────────────
     if (sub === 'add') {
-      await interaction.deferReply({ ephemeral: false });
+      await interaction.deferReply();
       const input = interaction.options.getString('target');
       const duration = interaction.options.getInteger('duration') || 30;
 
@@ -113,7 +113,7 @@ module.exports = {
 
     // ── RELEASE ─────────────────────────────────────────────
     if (sub === 'release') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: 64 });
       const input = interaction.options.getString('target');
 
       // Try to find in reservations by ID first (no API call needed)
@@ -165,7 +165,7 @@ module.exports = {
       ).rows;
 
       if (reservations.length === 0) {
-        return interaction.reply({ content: '📋 No targets are currently reserved.', ephemeral: true });
+        return interaction.reply({ content: '📋 No targets are currently reserved.', flags: 64 });
       }
 
       const lines = reservations.map(r => {
@@ -183,7 +183,7 @@ module.exports = {
         .setFooter({ text: 'Expired reservations are cleared automatically' })
         .setTimestamp();
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: 64 });
     }
   },
 };

@@ -1,5 +1,5 @@
 // ============================================================
-// src/commands/admin/help.js — Updated Phase 5
+// src/commands/admin/help.js — Updated Phase 6
 // ============================================================
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
@@ -36,14 +36,14 @@ const COMMAND_CATEGORIES = [
     role: '🔒 Military+',
     color: 0x3498db,
     commands: [
-      { cmd: '/intel',                  desc: 'Full intelligence dashboard — enemy alliances, watched nations' },
-      { cmd: '/targets',                desc: 'Recommended attack targets scored and ranked from watchlists' },
-      { cmd: '/watch nation add',       desc: 'Watch a nation — enter name, ID, or P&W link (any case)' },
-      { cmd: '/watch nation remove',    desc: 'Remove a nation from the watchlist' },
-      { cmd: '/watch nation list',      desc: 'Show all watched nations' },
-      { cmd: '/watch alliance add',     desc: 'Watch an alliance — enter name, ID, or P&W link (any case)' },
-      { cmd: '/watch alliance remove',  desc: 'Remove an alliance from the watchlist' },
-      { cmd: '/watch alliance list',    desc: 'Show all watched alliances' },
+      { cmd: '/intel',                 desc: 'Full intelligence dashboard — enemy alliances, watched nations' },
+      { cmd: '/targets',               desc: 'Recommended attack targets scored and ranked from watchlists' },
+      { cmd: '/watch nation add',      desc: 'Watch a nation — name, ID, or P&W link (any case)' },
+      { cmd: '/watch nation remove',   desc: 'Remove a nation from the watchlist' },
+      { cmd: '/watch nation list',     desc: 'Show all watched nations' },
+      { cmd: '/watch alliance add',    desc: 'Watch an alliance — name, ID, or P&W link (any case)' },
+      { cmd: '/watch alliance remove', desc: 'Remove an alliance from the watchlist' },
+      { cmd: '/watch alliance list',   desc: 'Show all watched alliances' },
     ],
   },
   {
@@ -51,18 +51,30 @@ const COMMAND_CATEGORIES = [
     role: '🔒 Military+',
     color: 0xe74c3c,
     commands: [
-      { cmd: '/assign create',    desc: 'Assign a target nation to an alliance member' },
-      { cmd: '/assign list',      desc: 'View all active target assignments' },
-      { cmd: '/assign mine',      desc: 'View assignments given to you personally' },
-      { cmd: '/assign accept',    desc: 'Accept an assignment given to you' },
-      { cmd: '/assign complete',  desc: 'Mark your assignment as completed' },
-      { cmd: '/assign cancel',    desc: 'Cancel an assignment (Military Officer+)' },
-      { cmd: '/counter find',     desc: 'Find who can counter-attack a specific enemy' },
-      { cmd: '/counter assign',   desc: 'Assign a member to counter a specific attacker' },
-      { cmd: '/counter check',    desc: 'See which alliance members are currently under attack' },
-      { cmd: '/reserve add',      desc: 'Reserve a target to prevent double-attacks' },
-      { cmd: '/reserve release',  desc: 'Release your reservation on a target' },
-      { cmd: '/reserve list',     desc: 'See all currently reserved targets' },
+      { cmd: '/assign create',       desc: 'Assign a target nation to an alliance member' },
+      { cmd: '/assign list',         desc: 'View all active target assignments' },
+      { cmd: '/assign mine',         desc: 'View assignments given to you personally' },
+      { cmd: '/assign accept',       desc: 'Accept an assignment given to you' },
+      { cmd: '/assign complete',     desc: 'Mark your assignment as completed' },
+      { cmd: '/assign cancel',       desc: 'Cancel an assignment' },
+      { cmd: '/counter find',        desc: 'Find who can counter-attack a specific enemy nation' },
+      { cmd: '/counter assign',      desc: 'Assign a member to counter a specific attacker' },
+      { cmd: '/counter check',       desc: 'See which alliance members are currently under attack' },
+      { cmd: '/reserve add',         desc: 'Reserve a target to prevent double-attacks' },
+      { cmd: '/reserve release',     desc: 'Release your reservation on a target' },
+      { cmd: '/reserve list',        desc: 'See all currently reserved targets' },
+      { cmd: '/blitz create',        desc: 'Create a timed blitz operation with launch countdown' },
+      { cmd: '/blitz list',          desc: 'View all active blitz operations' },
+      { cmd: '/blitz view',          desc: 'View full details and readiness of a blitz' },
+      { cmd: '/blitz ready',         desc: 'Mark yourself ready/not ready for a blitz' },
+      { cmd: '/blitz ping',          desc: 'Ping all members about a blitz with alert embed' },
+      { cmd: '/blitz cancel',        desc: 'Cancel a blitz operation' },
+      { cmd: '/operation create',    desc: 'Create a full war operation with objectives' },
+      { cmd: '/operation list',      desc: 'View all operations (filter by status)' },
+      { cmd: '/operation view',      desc: 'View full details and target list of an operation' },
+      { cmd: '/operation addtarget', desc: 'Add a target nation to an operation' },
+      { cmd: '/operation status',    desc: 'Update an operation status (planning/active/completed)' },
+      { cmd: '/operation report',    desc: 'Generate a completion report for an operation' },
     ],
   },
   {
@@ -72,6 +84,7 @@ const COMMAND_CATEGORIES = [
     commands: [
       { cmd: '/hq',        desc: 'Military command dashboard — assignments, beige exits, reservations' },
       { cmd: '/readiness', desc: 'Alliance military readiness — scores every member as a percentage' },
+      { cmd: '/health',    desc: 'Alliance health score — overall grade with strengths and improvements' },
     ],
   },
   {
@@ -86,12 +99,11 @@ const COMMAND_CATEGORIES = [
 ];
 
 const COMING_SOON = [
-  '💥  `/blitz` — Plan and coordinate timed alliance blitzes with countdown alerts',
-  '🏴  `/operation` — Create and manage full war operations with dedicated war rooms',
-  '📈  `/health` — Alliance health score and strategic overview report',
-  '🏆  `/participation` — War participation leaderboards and statistics',
-  '🗓️  `/report daily` — Automated daily alliance reports sent to a channel',
-  '🔔  `/alerts counters on/off` — Personal counter-alert DM preferences',
+  '🏆  `/participation` — War participation leaderboards and statistics per member',
+  '🗓️  `/report daily` — Automated daily reports sent to a channel on a schedule',
+  '🔔  `/alerts counters on/off` — Personal DM alerts when a member is attacked',
+  '📈  `/gov-dashboard` — Government-level strategic overview with coalition comparison',
+  '🌐  `/coalition` — Track coalition partners and compare combined military strength',
 ];
 
 module.exports = {
@@ -117,11 +129,9 @@ module.exports = {
     const categoryFilter = interaction.options.getString('category');
 
     if (categoryFilter) {
-      const map = {
-        setup: 0, beige: 1, intel: 2, military: 3, dashboards: 4, utility: 5,
-      };
+      const map = { setup: 0, beige: 1, intel: 2, military: 3, dashboards: 4, utility: 5 };
       const cat = COMMAND_CATEGORIES[map[categoryFilter]];
-      if (!cat) return interaction.reply({ content: '❌ Unknown category.', ephemeral: true });
+      if (!cat) return interaction.reply({ content: '❌ Unknown category.', flags: 64 });
 
       const embed = new EmbedBuilder()
         .setTitle(cat.name)
@@ -131,7 +141,7 @@ module.exports = {
         .setFooter({ text: 'Use /help to see all categories' })
         .setTimestamp();
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: 64 });
     }
 
     const embeds = [
@@ -144,7 +154,7 @@ module.exports = {
           '✅ Everyone — any member\n' +
           '🔒 Military+ — requires Military Officer role or higher\n' +
           '🔒 Admin only — requires Discord Administrator\n\n' +
-          '💡 Tip: names, IDs, and P&W links all work in any command that asks for a nation or alliance.\n' +
+          '💡 Names, IDs, and P&W links all work in any field asking for a nation or alliance.\n' +
           'Spelling is case-insensitive — `rose`, `Rose`, and `ROSE` all find the same alliance.\n\u200b'
         ),
 
@@ -166,6 +176,6 @@ module.exports = {
         .setTimestamp(),
     ];
 
-    return interaction.reply({ embeds, ephemeral: true });
+    return interaction.reply({ embeds, flags: 64 });
   },
 };

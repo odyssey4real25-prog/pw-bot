@@ -40,6 +40,7 @@ async function connectDatabase() {
   saveDatabase();
   setInterval(saveDatabase, 30000);
 
+  addPhase6Tables();
   logger.info(`Database ready at: ${DB_PATH}`);
 }
 
@@ -236,4 +237,49 @@ function createTables() {
   logger.info('All database tables ready');
 }
 
-module.exports = { connectDatabase, query, run, queryOne, saveDatabase };
+module.exports = { connectDatabase, query, run, queryOne, saveDatabase, addPhase6Tables };
+
+// NOTE: This function is appended — new tables added in Phase 6
+// Call addPhase6Tables() from connectDatabase if needed,
+// or just add these to the createTables() db.run block above.
+// The simplest approach: we add them here and call on startup.
+function addPhase6Tables() {
+  if (!db) return;
+  try {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS blitz_operations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        launch_time TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS blitz_participants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        blitz_id INTEGER NOT NULL,
+        discord_user_id TEXT NOT NULL,
+        status TEXT DEFAULT 'ready',
+        responded_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(blitz_id, discord_user_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS operation_targets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation_id INTEGER NOT NULL,
+        nation_id INTEGER NOT NULL,
+        nation_name TEXT,
+        assigned_to TEXT,
+        status TEXT DEFAULT 'assigned',
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(operation_id, nation_id)
+      );
+    `);
+  } catch (err) {
+    // Tables may already exist — that's fine
+  }
+}
+

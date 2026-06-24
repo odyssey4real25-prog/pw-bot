@@ -104,7 +104,7 @@ module.exports = {
     if (group === 'nation') {
 
       if (sub === 'add') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 });
         const input = interaction.options.getString('nation');
         const priority = interaction.options.getString('priority') || 'normal';
         const notes = interaction.options.getString('notes') || null;
@@ -143,7 +143,7 @@ module.exports = {
       }
 
       if (sub === 'remove') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 });
         const input = interaction.options.getString('nation');
 
         // First try to find it in our watchlist directly by name or ID
@@ -198,7 +198,7 @@ module.exports = {
         if (nations.length === 0) {
           return interaction.reply({
             content: '📋 No nations on the watchlist yet.\nUse `/watch nation add` and enter a nation name, ID, or P&W link.',
-            ephemeral: true,
+            flags: 64,
           });
         }
 
@@ -215,7 +215,7 @@ module.exports = {
           .setFooter({ text: '🔴 Critical  🟠 High  🟡 Normal' })
           .setTimestamp();
 
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+        return interaction.reply({ embeds: [embed], flags: 64 });
       }
     }
 
@@ -225,7 +225,7 @@ module.exports = {
     if (group === 'alliance') {
 
       if (sub === 'add') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 });
         const input = interaction.options.getString('alliance');
         const type = interaction.options.getString('type') || 'enemy';
         const notes = interaction.options.getString('notes') || null;
@@ -257,14 +257,14 @@ module.exports = {
         const typeEmoji = { enemy: '⚔️', friendly: '🤝', neutral: '⚪' };
         return interaction.editReply(
           `✅ Added **${alliance.name}** (ID: ${alliance.id}) as ${typeEmoji[type]} **${type}**.\n` +
-          `Members: ${alliance.num_nations} | Score: ${alliance.score?.toLocaleString()}\n` +
+          `Members: ${alliance.nations?.length || "?"} | Score: ${alliance.score?.toLocaleString()}\n` +
           `Beige tracking and intelligence monitoring is now active for this alliance.` +
           (notes ? `\nNotes: _${notes}_` : '')
         );
       }
 
       if (sub === 'remove') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 });
         const input = interaction.options.getString('alliance');
 
         let watchlistEntry = null;
@@ -315,7 +315,7 @@ module.exports = {
         if (alliances.length === 0) {
           return interaction.reply({
             content: '📋 No alliances on the watchlist yet.\nUse `/watch alliance add` and enter an alliance name, ID, or P&W link.',
-            ephemeral: true,
+            flags: 64,
           });
         }
 
@@ -331,7 +331,7 @@ module.exports = {
           .setDescription(lines.join('\n'))
           .setTimestamp();
 
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+        return interaction.reply({ embeds: [embed], flags: 64 });
       }
     }
   },
