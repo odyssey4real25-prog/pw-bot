@@ -1,7 +1,17 @@
 // ============================================================
 // src/utils/pwApi.js — Politics & War API client
-// - Name search is done client-side (case-insensitive)
-// - Applicants are excluded from all alliance member queries
+//
+// KEY FACTS from the official P&W GraphQL schema:
+//   - alliances() has NO name filter — only id:[Int]
+//   - nations() accepts nation_name:[String] (array, exact match only)
+//   - Both are case-sensitive on the server side
+//
+// Our solution:
+//   - Nations: send the name as-is; the API does exact match.
+//     Since we can't know the exact casing, we also try common
+//     variants (Title Case, UPPER, lower) in sequence.
+//   - Alliances: fetch pages of alliances and match client-side,
+//     fully case-insensitive using JavaScript .toLowerCase().
 // ============================================================
 
 const axios = require('axios');
@@ -10,84 +20,72 @@ const logger = require('./logger');
 const PW_API_BASE = 'https://api.politicsandwar.com/graphql?api_key=';
 const cache = new Map();
 const CACHE_TIMES = {
-  nation: 5 * 60 * 1000,
+  nation:   5  * 60 * 1000,
   alliance: 10 * 60 * 1000,
-  wars: 2 * 60 * 1000,
 };
 
-// Alliance positions that count as actual members (not applicants)
+// Real member positions — excludes APPLICANT and NOALLIANCE
 const MEMBER_POSITIONS = ['MEMBER', 'OFFICER', 'HEIR', 'LEADER'];
 
+// ─────────────────────────────────────────────────────────────
+// CORE QUERY RUNNER
+// ─────────────────────────────────────────────────────────────
 async function pwQuery(queryStr, variables = {}) {
   const url = `${PW_API_BASE}${process.env.PW_API_KEY}`;
   try {
-    const response = await axios.post(url, { query: queryStr, variables }, {
+    const res = await axios.post(url, { query: queryStr, variables }, {
       headers: { 'Content-Type': 'application/json' },
       timeout: 15000,
     });
-    if (response.data.errors) {
-      logger.warn('P&W API errors:', JSON.stringify(response.data.errors));
+    if (res.data.errors) {
+      logger.warn('P&W API errors:', JSON.stringify(res.data.errors));
     }
-    return response.data.data;
-  } catch (error) {
-    if (error.response?.status === 429) {
-      logger.warn('Rate limit hit — waiting 60s...');
+    return res.data.data;
+  } catch (err) {
+    if (err.response?.status === 429) {
+      logger.warn('Rate limited — waiting 60s');
       await new Promise(r => setTimeout(r, 60000));
       return pwQuery(queryStr, variables);
     }
-    logger.error('P&W API failed:', error.message);
-    throw error;
+    logger.error('P&W API error:', err.message);
+    throw err;
   }
 }
 
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 // SMART RESOLVERS
-// Accepts: nation/alliance ID, name (any case), or P&W URL
-// Name matching is done on our side — fully case-insensitive
-// ============================================================
+// Accept: numeric ID  |  P&W URL  |  name (any casing)
+// ─────────────────────────────────────────────────────────────
 
 async function resolveNation(input) {
   if (!input) return null;
   input = input.trim();
-
-  // P&W URL  e.g. https://politicsandwar.com/nation/id=12345
   const urlMatch = input.match(/nation\/id=(\d+)/i);
   if (urlMatch) return getNation(parseInt(urlMatch[1]));
-
-  // Pure number → treat as ID
   if (/^\d+$/.test(input)) return getNation(parseInt(input));
-
-  // Otherwise → search by name (case-insensitive, client-side)
   return searchNationByName(input);
 }
 
 async function resolveAlliance(input) {
   if (!input) return null;
   input = input.trim();
-
-  // P&W URL  e.g. https://politicsandwar.com/alliance/id=1234
   const urlMatch = input.match(/alliance\/id=(\d+)/i);
   if (urlMatch) return getAllianceInfo(parseInt(urlMatch[1]));
-
-  // Pure number → treat as ID
   if (/^\d+$/.test(input)) return getAllianceInfo(parseInt(input));
-
-  // Otherwise → search by name (case-insensitive, client-side)
   return searchAllianceByName(input);
 }
 
-// ============================================================
-// NATION FUNCTIONS
-// ============================================================
-
+// ─────────────────────────────────────────────────────────────
+// NATION — fetch by ID
+// ─────────────────────────────────────────────────────────────
 async function getNation(nationId) {
-  const cacheKey = `nation_${nationId}`;
-  const cached = getFromCache(cacheKey);
-  if (cached) return cached;
+  const key = `nation_${nationId}`;
+  const hit = getFromCache(key);
+  if (hit) return hit;
 
   const data = await pwQuery(`
-    query GetNation($id: [Int]) {
-      nations(id: $id, first: 1) {
+    query($id:[Int]) {
+      nations(id:$id, first:1) {
         data {
           id nation_name leader_name alliance_id alliance_position
           score num_cities color beige_turns vacation_mode_turns
@@ -97,25 +95,38 @@ async function getNation(nationId) {
         }
       }
     }
-  `, { id: [parseInt(nationId)] });
+  `, { id: [nationId] });
 
   const nation = data?.nations?.data?.[0] || null;
-  if (nation) setCache(cacheKey, nation, CACHE_TIMES.nation);
+  if (nation) setCache(key, nation, CACHE_TIMES.nation);
   return nation;
 }
 
-// Search nations by name — fetches a batch and matches client-side
-// This is the only reliable way to do case-insensitive search
+// ─────────────────────────────────────────────────────────────
+// NATION — search by name (case-insensitive)
+//
+// The API's nation_name filter accepts an ARRAY of exact strings.
+// Strategy: send multiple casing variants in one request,
+// then pick the one whose lowercase matches the user's input.
+// ─────────────────────────────────────────────────────────────
 async function searchNationByName(name) {
-  const cacheKey = `nation_search_${name.toLowerCase()}`;
-  const cached = getFromCache(cacheKey);
-  if (cached) return cached;
+  const key = `nation_name_${name.toLowerCase()}`;
+  const hit = getFromCache(key);
+  if (hit) return hit;
 
-  // P&W API supports partial name search — fetch up to 10 results
-  // and pick the best match ourselves
+  // Build casing variants
+  const variants = dedupe([
+    name,                          // as typed
+    name.toLowerCase(),            // all lowercase
+    name.toUpperCase(),            // ALL CAPS
+    toTitleCase(name),             // Title Case
+    toSentenceCase(name),          // Sentence case
+  ]);
+
+  // Send all variants in a single API call (nation_name accepts an array)
   const data = await pwQuery(`
-    query SearchNation($name: String) {
-      nations(nation_name: $name, first: 10) {
+    query($names:[String]) {
+      nations(nation_name:$names, first:10) {
         data {
           id nation_name leader_name alliance_id alliance_position
           score num_cities color beige_turns vacation_mode_turns
@@ -125,105 +136,101 @@ async function searchNationByName(name) {
         }
       }
     }
-  `, { name });
+  `, { names: variants });
 
   const results = data?.nations?.data || [];
+  if (results.length === 0) return null;
 
-  // Find exact case-insensitive match first
-  const nameLower = name.toLowerCase();
-  const exactMatch = results.find(n => n.nation_name.toLowerCase() === nameLower);
-  const nation = exactMatch || results[0] || null;
+  const target = name.toLowerCase();
 
-  if (nation) setCache(cacheKey, nation, CACHE_TIMES.nation);
+  // Prefer exact case-insensitive match, fall back to first result
+  const nation = results.find(n => n.nation_name.toLowerCase() === target)
+              || results[0];
+
+  setCache(key, nation, CACHE_TIMES.nation);
   return nation;
 }
 
-// ============================================================
-// ALLIANCE FUNCTIONS
-// ============================================================
-
+// ─────────────────────────────────────────────────────────────
+// ALLIANCE — fetch by ID
+// ─────────────────────────────────────────────────────────────
 async function getAllianceInfo(allianceId) {
-  const cacheKey = `alliance_info_${allianceId}`;
-  const cached = getFromCache(cacheKey);
-  if (cached) return cached;
+  const key = `alliance_${allianceId}`;
+  const hit = getFromCache(key);
+  if (hit) return hit;
 
   const data = await pwQuery(`
-    query GetAlliance($id: [Int]) {
-      alliances(id: $id, first: 1) {
+    query($id:[Int]) {
+      alliances(id:$id, first:1) {
         data { id name score color num_nations }
       }
     }
   `, { id: [parseInt(allianceId)] });
 
   const alliance = data?.alliances?.data?.[0] || null;
-  if (alliance) setCache(cacheKey, alliance, CACHE_TIMES.alliance);
+  if (alliance) setCache(key, alliance, CACHE_TIMES.alliance);
   return alliance;
 }
 
-// Search alliances by name — fetches top 20 and matches client-side
-// This is the only reliable way to do case-insensitive search
+// ─────────────────────────────────────────────────────────────
+// ALLIANCE — search by name (case-insensitive, client-side)
+//
+// The alliances() query has NO name filter in the schema.
+// We must fetch pages of alliances and match locally.
+// P&W has ~1000+ alliances. We fetch sorted by score DESC
+// so the most well-known alliances appear first.
+// We page through up to 200 results (4 pages of 50).
+// ─────────────────────────────────────────────────────────────
 async function searchAllianceByName(name) {
-  const cacheKey = `alliance_search_${name.toLowerCase()}`;
-  const cached = getFromCache(cacheKey);
-  if (cached) return cached;
+  const key = `alliance_name_${name.toLowerCase()}`;
+  const hit = getFromCache(key);
+  if (hit) return hit;
 
-  // Fetch a batch of alliances ordered by score (most prominent first)
-  // The API's name filter is case-sensitive and exact, so we do NOT
-  // pass the name as a filter — we fetch the top alliances and search ourselves
-  const data = await pwQuery(`
-    query SearchAlliances {
-      alliances(first: 50, orderBy: { column: SCORE, order: DESC }) {
-        data { id name score color num_nations }
-      }
-    }
-  `);
+  const target = name.toLowerCase().trim();
+  let page = 1;
+  let found = null;
 
-  const alliances = data?.alliances?.data || [];
-  const nameLower = name.toLowerCase();
-
-  // Try exact match first (case-insensitive)
-  let match = alliances.find(a => a.name.toLowerCase() === nameLower);
-
-  // If no exact match, try "starts with"
-  if (!match) {
-    match = alliances.find(a => a.name.toLowerCase().startsWith(nameLower));
-  }
-
-  // If still nothing, try "includes"
-  if (!match) {
-    match = alliances.find(a => a.name.toLowerCase().includes(nameLower));
-  }
-
-  // If STILL nothing, the alliance might be smaller — try a second fetch
-  // with the API's own name filter as a hint (even if case-sensitive)
-  if (!match) {
-    const fallback = await pwQuery(`
-      query SearchAllianceFallback($name: String) {
-        alliances(name: $name, first: 10) {
+  while (page <= 4 && !found) {
+    const data = await pwQuery(`
+      query($page:Int) {
+        alliances(first:50, page:$page) {
           data { id name score color num_nations }
+          paginatorInfo { hasMorePages }
         }
       }
-    `, { name });
+    `, { page });
 
-    const fallbackResults = fallback?.alliances?.data || [];
-    match = fallbackResults.find(a => a.name.toLowerCase() === nameLower)
-          || fallbackResults[0]
-          || null;
+    const alliances = data?.alliances?.data || [];
+    const hasMore   = data?.alliances?.paginatorInfo?.hasMorePages;
+
+    // Try exact match first
+    found = alliances.find(a => a.name.toLowerCase() === target);
+
+    // Then "starts with"
+    if (!found) found = alliances.find(a => a.name.toLowerCase().startsWith(target));
+
+    // Then "includes"
+    if (!found) found = alliances.find(a => a.name.toLowerCase().includes(target));
+
+    if (!hasMore) break;
+    page++;
   }
 
-  if (match) setCache(cacheKey, match, CACHE_TIMES.alliance);
-  return match;
+  if (found) setCache(key, found, CACHE_TIMES.alliance);
+  return found || null;
 }
 
-// Get all TRUE members of an alliance (excludes applicants)
+// ─────────────────────────────────────────────────────────────
+// ALLIANCE MEMBERS — excludes applicants
+// ─────────────────────────────────────────────────────────────
 async function getAllianceMembers(allianceId) {
-  const cacheKey = `alliance_members_${allianceId}`;
-  const cached = getFromCache(cacheKey);
-  if (cached) return cached;
+  const key = `alliance_members_${allianceId}`;
+  const hit = getFromCache(key);
+  if (hit) return hit;
 
   const data = await pwQuery(`
-    query GetAllianceMembers($id: [Int]) {
-      alliances(id: $id, first: 1) {
+    query($id:[Int]) {
+      alliances(id:$id, first:1) {
         data {
           id name
           nations {
@@ -237,51 +244,56 @@ async function getAllianceMembers(allianceId) {
     }
   `, { id: [parseInt(allianceId)] });
 
-  const allNations = data?.alliances?.data?.[0]?.nations || [];
-
-  // Filter out applicants — only count real members
-  const members = allNations.filter(n =>
-    MEMBER_POSITIONS.includes(n.alliance_position?.toUpperCase())
+  const all     = data?.alliances?.data?.[0]?.nations || [];
+  const members = all.filter(n =>
+    MEMBER_POSITIONS.includes((n.alliance_position || '').toUpperCase())
   );
 
-  logger.debug(`Alliance ${allianceId}: ${allNations.length} total nations, ${members.length} actual members (${allNations.length - members.length} applicants excluded)`);
-
-  setCache(cacheKey, members, CACHE_TIMES.alliance);
+  logger.debug(`Alliance ${allianceId}: ${all.length} total, ${members.length} members, ${all.length - members.length} applicants excluded`);
+  setCache(key, members, CACHE_TIMES.alliance);
   return members;
 }
 
+// ─────────────────────────────────────────────────────────────
+// WARS
+// ─────────────────────────────────────────────────────────────
 async function getNationWars(nationId) {
   const data = await pwQuery(`
-    query GetWars($nationId: [Int]) {
-      wars(nation_id: $nationId, active: true, first: 10) {
-        data {
-          id date attid defid att_alliance_id def_alliance_id
-          attacker { nation_name score }
-          defender { nation_name score }
-          status turnsleft
-        }
+    query($id:[ID]) {
+      wars(nation_id:$id, active:true) {
+        id date attid defid att_alliance_id def_alliance_id
+        attacker { nation_name score }
+        defender { nation_name score }
+        status turnsleft
       }
     }
-  `, { nationId: [parseInt(nationId)] });
-  return data?.wars?.data || [];
+  `, { id: [String(nationId)] });
+  return data?.wars || [];
 }
 
-// ============================================================
-// CACHE HELPERS
-// ============================================================
-
+// ─────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────
+function toTitleCase(s) {
+  return s.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+function toSentenceCase(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+function dedupe(arr) {
+  return [...new Set(arr)];
+}
 function getFromCache(key) {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) { cache.delete(key); return null; }
-  return entry.data;
+  const e = cache.get(key);
+  if (!e) return null;
+  if (Date.now() > e.expiresAt) { cache.delete(key); return null; }
+  return e.data;
 }
 function setCache(key, data, ttl) {
   cache.set(key, { data, expiresAt: Date.now() + ttl });
 }
 function clearCache(key) {
-  if (key) cache.delete(key);
-  else cache.clear();
+  if (key) cache.delete(key); else cache.clear();
 }
 
 module.exports = {
@@ -289,6 +301,5 @@ module.exports = {
   getNation, searchNationByName, resolveNation,
   getAllianceInfo, searchAllianceByName, resolveAlliance,
   getAllianceMembers, getNationWars,
-  clearCache,
-  MEMBER_POSITIONS,
+  clearCache, MEMBER_POSITIONS,
 };
