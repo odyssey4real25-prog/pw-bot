@@ -55,7 +55,9 @@ async function processGuildDefense(client, guildId, allianceId) {
     const allWars = data?.wars?.data || [];
 
     // Filter to only defensive wars (we are the defender)
-    const defWars = allWars.filter(w => w.def_alliance_id === parseInt(allianceId));
+    // P&W returns IDs as strings — compare as strings
+    const allianceIdStr = String(allianceId);
+    const defWars = allWars.filter(w => String(w.def_alliance_id) === allianceIdStr);
     if (defWars.length === 0) return;
 
     // Only alert on wars we haven't seen before

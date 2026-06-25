@@ -1,8 +1,6 @@
 // ============================================================
 // src/commands/military/war.js
-// /war — View and manage active alliance wars
-// P&W API uses alliance_id (not att/def_alliance_id)
-// Nation IDs must be integers
+// P&W returns alliance IDs as strings — we compare as strings
 // ============================================================
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
@@ -46,9 +44,10 @@ module.exports = {
       return interaction.reply({ content: '❌ No alliance configured. Use `/config alliance` first.', flags: 64 });
     }
 
-    const allianceId = parseInt(guildRow.alliance_id);
+    // P&W returns att_alliance_id and def_alliance_id as STRINGS
+    // so we compare as strings to avoid type mismatch
+    const allianceIdStr = String(guildRow.alliance_id);
 
-    // Shared war fetcher — gets all wars involving our alliance
     async function fetchAllianceWars() {
       const data = await pwQuery(`
         query GetAllianceWars($allianceId: [Int]) {
@@ -57,6 +56,8 @@ module.exports = {
               id
               att_alliance_id
               def_alliance_id
+              attid
+              defid
               attacker {
                 id nation_name score
                 soldiers tanks aircraft ships missiles nukes
@@ -71,7 +72,7 @@ module.exports = {
             }
           }
         }
-      `, { allianceId: [allianceId] });
+      `, { allianceId: [parseInt(guildRow.alliance_id)] });
       return data?.wars?.data || [];
     }
 
@@ -81,8 +82,8 @@ module.exports = {
       await interaction.editReply('⏳ Fetching war data from P&W...');
 
       const allWars = await fetchAllianceWars();
-      const offWars = allWars.filter(w => w.att_alliance_id === allianceId);
-      const defWars = allWars.filter(w => w.def_alliance_id === allianceId);
+      const offWars = allWars.filter(w => String(w.att_alliance_id) === allianceIdStr);
+      const defWars = allWars.filter(w => String(w.def_alliance_id) === allianceIdStr);
 
       const embed = new EmbedBuilder()
         .setTitle('⚔️ Alliance War Status')
@@ -120,8 +121,8 @@ module.exports = {
       await interaction.deferReply();
       await interaction.editReply('⏳ Checking defensive wars...');
 
-      const allWars  = await fetchAllianceWars();
-      const defWars  = allWars.filter(w => w.def_alliance_id === allianceId);
+      const allWars = await fetchAllianceWars();
+      const defWars = allWars.filter(w => String(w.def_alliance_id) === allianceIdStr);
 
       if (defWars.length === 0) {
         return interaction.editReply({
@@ -158,7 +159,7 @@ module.exports = {
       await interaction.editReply('⏳ Checking offensive wars...');
 
       const allWars = await fetchAllianceWars();
-      const offWars = allWars.filter(w => w.att_alliance_id === allianceId);
+      const offWars = allWars.filter(w => String(w.att_alliance_id) === allianceIdStr);
 
       if (offWars.length === 0) {
         return interaction.editReply({
@@ -199,16 +200,15 @@ module.exports = {
         return interaction.editReply(`❌ Could not find nation **"${input}"**. Try name, ID, or P&W link.`);
       }
 
-      // Nation ID must be an integer
       const data = await pwQuery(`
         query GetNationWars($id: [Int]) {
           wars(nation_id: $id, active: true, first: 10) {
             data {
               id
-              att_alliance_id
-              def_alliance_id
               attid
               defid
+              att_alliance_id
+              def_alliance_id
               attacker { id nation_name score alliance { name } }
               defender { id nation_name score alliance { name } }
               turnsleft
@@ -231,8 +231,10 @@ module.exports = {
         });
       }
 
+      // attid and defid are also strings from the API
+      const nationIdStr = String(nation.id);
       const lines = wars.map(w => {
-        const isAttacker = parseInt(w.attid) === parseInt(nation.id);
+        const isAttacker = String(w.attid) === nationIdStr;
         const opponent   = isAttacker ? w.defender : w.attacker;
         const role       = isAttacker ? '⚔️ Attacking' : '🛡️ Defending';
         return (
