@@ -1,5 +1,5 @@
 // ============================================================
-// src/commands/admin/help.js — Updated Phase 6
+// src/commands/admin/help.js — Updated Phase 8
 // ============================================================
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
@@ -13,7 +13,7 @@ const COMMAND_CATEGORIES = [
       { cmd: '/config alliance',        desc: 'Set your P&W alliance ID' },
       { cmd: '/config channel beige',   desc: 'Set the channel for beige exit alerts' },
       { cmd: '/config channel wars',    desc: 'Set the channel for war/defense alerts' },
-      { cmd: '/config channel intel',   desc: 'Set the channel for intelligence alerts' },
+      { cmd: '/config channel intel',   desc: 'Set the intel channel (also receives military change alerts and daily reports)' },
       { cmd: '/config role military',   desc: 'Set which Discord role = Military Officer' },
       { cmd: '/config role government', desc: 'Set which Discord role = Government' },
       { cmd: '/config view',            desc: 'View all current bot settings' },
@@ -33,17 +33,21 @@ const COMMAND_CATEGORIES = [
   },
   {
     name: '🕵️ Intelligence & Watchlists',
-    role: '🔒 Military+',
+    role: '🔒 Military+ (coalition requires Government+)',
     color: 0x3498db,
     commands: [
-      { cmd: '/intel',                 desc: 'Full intelligence dashboard — enemy alliances, watched nations' },
-      { cmd: '/targets',               desc: 'Recommended attack targets scored and ranked from watchlists' },
-      { cmd: '/watch nation add',      desc: 'Watch a nation — name, ID, or P&W link (any case)' },
-      { cmd: '/watch nation remove',   desc: 'Remove a nation from the watchlist' },
-      { cmd: '/watch nation list',     desc: 'Show all watched nations' },
-      { cmd: '/watch alliance add',    desc: 'Watch an alliance — name, ID, or P&W link (any case)' },
-      { cmd: '/watch alliance remove', desc: 'Remove an alliance from the watchlist' },
-      { cmd: '/watch alliance list',   desc: 'Show all watched alliances' },
+      { cmd: '/intel',                    desc: 'Full intelligence dashboard — enemy alliances and watched nations' },
+      { cmd: '/targets',                  desc: 'Recommended attack targets scored and ranked from watchlists' },
+      { cmd: '/watch nation add',         desc: 'Watch a nation — name, ID, or P&W link (any case)' },
+      { cmd: '/watch nation remove',      desc: 'Remove a nation from the watchlist' },
+      { cmd: '/watch nation list',        desc: 'Show all watched nations' },
+      { cmd: '/watch alliance add',       desc: 'Watch an alliance — name, ID, or P&W link (any case)' },
+      { cmd: '/watch alliance remove',    desc: 'Remove an alliance from the watchlist' },
+      { cmd: '/watch alliance list',      desc: 'Show all watched alliances' },
+      { cmd: '/coalition add',            desc: 'Add an alliance to your friendly or enemy coalition' },
+      { cmd: '/coalition remove',         desc: 'Remove an alliance from the coalition list' },
+      { cmd: '/coalition list',           desc: 'Show all coalition members and enemies' },
+      { cmd: '/coalition compare',        desc: 'Side-by-side military comparison of our coalition vs enemy coalition' },
     ],
   },
   {
@@ -67,24 +71,33 @@ const COMMAND_CATEGORIES = [
       { cmd: '/blitz list',          desc: 'View all active blitz operations' },
       { cmd: '/blitz view',          desc: 'View full details and readiness of a blitz' },
       { cmd: '/blitz ready',         desc: 'Mark yourself ready/not ready for a blitz' },
-      { cmd: '/blitz ping',          desc: 'Ping all members about a blitz with alert embed' },
+      { cmd: '/blitz ping',          desc: 'Ping all members about a blitz with an alert embed' },
       { cmd: '/blitz cancel',        desc: 'Cancel a blitz operation' },
       { cmd: '/operation create',    desc: 'Create a full war operation with objectives' },
-      { cmd: '/operation list',      desc: 'View all operations (filter by status)' },
+      { cmd: '/operation list',      desc: 'View all operations filtered by status' },
       { cmd: '/operation view',      desc: 'View full details and target list of an operation' },
       { cmd: '/operation addtarget', desc: 'Add a target nation to an operation' },
       { cmd: '/operation status',    desc: 'Update an operation status (planning/active/completed)' },
       { cmd: '/operation report',    desc: 'Generate a completion report for an operation' },
+      { cmd: '/compliance set',      desc: 'Set minimum military standards (soldiers, tanks, aircraft, ships)' },
+      { cmd: '/compliance view',     desc: 'View current compliance standards' },
+      { cmd: '/compliance check',    desc: 'Check which members meet or fail compliance standards' },
+      { cmd: '/compliance report',   desc: 'Full compliance report with pass rate and breakdown by category' },
     ],
   },
   {
     name: '📊 Dashboards & Reports',
-    role: '🔒 Military+',
+    role: '🔒 Military+ (gov-dashboard requires Government+)',
     color: 0x9b59b6,
     commands: [
-      { cmd: '/hq',        desc: 'Military command dashboard — assignments, beige exits, reservations' },
-      { cmd: '/readiness', desc: 'Alliance military readiness — scores every member as a percentage' },
-      { cmd: '/health',    desc: 'Alliance health score — overall grade with strengths and improvements' },
+      { cmd: '/hq',                        desc: 'Military command dashboard — assignments, beige, reservations' },
+      { cmd: '/readiness',                 desc: 'Alliance military readiness — scores every member as a percentage' },
+      { cmd: '/health',                    desc: 'Alliance health score — overall grade with strengths and improvements' },
+      { cmd: '/gov-dashboard',             desc: 'Government strategic overview — military strength, enemy comparison, ops' },
+      { cmd: '/participation leaderboard', desc: 'Leaderboards — most wars, assignments completed, counters done' },
+      { cmd: '/participation snapshot',    desc: 'Pull a fresh war activity snapshot from P&W for leaderboards' },
+      { cmd: '/participation inactive',    desc: 'Show members currently with zero offensive wars' },
+      { cmd: '/report daily',              desc: 'Manually send the daily alliance report right now (Government+)' },
     ],
   },
   {
@@ -99,11 +112,10 @@ const COMMAND_CATEGORIES = [
 ];
 
 const COMING_SOON = [
-  '🏆  `/participation` — War participation leaderboards and statistics per member',
-  '🗓️  `/report daily` — Automated daily reports sent to a channel on a schedule',
-  '🔔  `/alerts counters on/off` — Personal DM alerts when a member is attacked',
-  '📈  `/gov-dashboard` — Government-level strategic overview with coalition comparison',
-  '🌐  `/coalition` — Track coalition partners and compare combined military strength',
+  '🔔  Personal counter-alert DMs when a member is attacked',
+  '📊  Weekly and monthly summary reports',
+  '🏗️  Alliance infrastructure and project tracking',
+  '🤖  AI-powered target recommendations based on war history',
 ];
 
 module.exports = {
@@ -153,6 +165,7 @@ module.exports = {
           '**Permission levels:**\n' +
           '✅ Everyone — any member\n' +
           '🔒 Military+ — requires Military Officer role or higher\n' +
+          '🔒 Government+ — requires Government role or higher\n' +
           '🔒 Admin only — requires Discord Administrator\n\n' +
           '💡 Names, IDs, and P&W links all work in any field asking for a nation or alliance.\n' +
           'Spelling is case-insensitive — `rose`, `Rose`, and `ROSE` all find the same alliance.\n\u200b'
@@ -172,7 +185,7 @@ module.exports = {
         .setTitle('🚧 Coming Soon')
         .setColor(0x7f8c8d)
         .setDescription(COMING_SOON.join('\n'))
-        .setFooter({ text: 'PW Defense Bot • More features added every phase' })
+        .setFooter({ text: 'PW Defense Bot • Always improving' })
         .setTimestamp(),
     ];
 

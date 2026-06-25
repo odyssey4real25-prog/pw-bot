@@ -41,6 +41,7 @@ async function connectDatabase() {
   setInterval(saveDatabase, 30000);
 
   addPhase6Tables();
+  addPhase7Tables();
   logger.info(`Database ready at: ${DB_PATH}`);
 }
 
@@ -237,7 +238,7 @@ function createTables() {
   logger.info('All database tables ready');
 }
 
-module.exports = { connectDatabase, query, run, queryOne, saveDatabase, addPhase6Tables };
+module.exports = { connectDatabase, query, run, queryOne, saveDatabase, addPhase6Tables, addPhase7Tables };
 
 // NOTE: This function is appended — new tables added in Phase 6
 // Call addPhase6Tables() from connectDatabase if needed,
@@ -283,3 +284,17 @@ function addPhase6Tables() {
   }
 }
 
+
+function addPhase7Tables() {
+  if (!db) return;
+  try {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS participation_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        data TEXT NOT NULL,
+        recorded_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  } catch (err) { /* already exists */ }
+}

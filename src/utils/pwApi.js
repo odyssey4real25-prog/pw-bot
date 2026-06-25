@@ -283,34 +283,36 @@ async function getAllianceMembers(allianceId) {
   const hit = getFromCache(key);
   if (hit) return hit;
 
+  // We query nations() directly (not nested inside alliances) because the
+  // nested nations field in the alliance query does NOT return missiles or nukes.
+  // Querying nations() directly gives us the full military dataset.
   const data = await pwQuery(`
-    query GetMembers($id: [Int]) {
-      alliances(id: $id, first: 1) {
+    query GetMembers($allianceId: [Int]) {
+      nations(alliance_id: $allianceId, first: 500) {
         data {
           id
-          name
-          nations {
-            id
-            nation_name
-            score
-            num_cities
-            alliance_position
-            soldiers
-            tanks
-            aircraft
-            ships
-            beige_turns
-            vacation_mode_turns
-            offensive_wars_count
-            defensive_wars_count
-            last_active
-          }
+          nation_name
+          score
+          num_cities
+          alliance_id
+          alliance_position
+          soldiers
+          tanks
+          aircraft
+          ships
+          missiles
+          nukes
+          beige_turns
+          vacation_mode_turns
+          offensive_wars_count
+          defensive_wars_count
+          last_active
         }
       }
     }
-  `, { id: [parseInt(allianceId)] });
+  `, { allianceId: [parseInt(allianceId)] });
 
-  const all     = data?.alliances?.data?.[0]?.nations || [];
+  const all     = data?.nations?.data || [];
   const members = all.filter(n =>
     MEMBER_POSITIONS.includes((n.alliance_position || '').toUpperCase())
   );
