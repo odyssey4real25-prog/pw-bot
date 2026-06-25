@@ -1,8 +1,6 @@
 // ============================================================
 // src/systems/defense/defenseMonitor.js
 // Monitors alliance members for new defensive wars
-// P&W API uses alliance_id (not att/def_alliance_id)
-// We filter attacker/defender by comparing alliance IDs
 // ============================================================
 
 const { EmbedBuilder } = require('discord.js');
@@ -29,7 +27,6 @@ async function processGuildDefense(client, guildId, allianceId) {
     const channel = client.channels.cache.get(channelRow.discord_channel_id);
     if (!channel) return;
 
-    // alliance_id returns all wars involving this alliance (both sides)
     const data = await pwQuery(`
       query GetAllianceWars($allianceId: [Int]) {
         wars(alliance_id: $allianceId, active: true, first: 100) {
@@ -54,7 +51,6 @@ async function processGuildDefense(client, guildId, allianceId) {
 
     const allWars = data?.wars?.data || [];
 
-    // Filter to only defensive wars (we are the defender)
     // P&W returns IDs as strings — compare as strings
     const allianceIdStr = String(allianceId);
     const defWars = allWars.filter(w => String(w.def_alliance_id) === allianceIdStr);
@@ -65,12 +61,12 @@ async function processGuildDefense(client, guildId, allianceId) {
     for (const war of defWars) {
       const seen = queryOne(
         'SELECT id FROM defense_alerts_sent WHERE guild_id = ? AND war_id = ?',
-        [guildId, war.id]
+        [guildId, String(war.id)]
       );
       if (!seen) {
         newWars.push(war);
         run('INSERT OR IGNORE INTO defense_alerts_sent (guild_id, war_id) VALUES (?, ?)',
-          [guildId, war.id]);
+          [guildId, String(war.id)]);
       }
     }
     if (newWars.length === 0) return;
@@ -104,15 +100,12 @@ async function sendDefenseAlert(channel, ping, war) {
       .addFields(
         {
           name: '🛡️ Defender (Our Member)',
-          value: `**[${defender.nation_name}](https://politicsandwar.com/nation/id=${defender.id})**\n` +
-                 `Score: ${defender.score?.toLocaleString() || '?'}`,
+          value: `[${defender.nation_name}](https://politicsandwar.com/nation/id=${defender.id}) — Score: ${defender.score?.toLocaleString() || '?'}`,
           inline: true,
         },
         {
           name: '⚔️ Attacker (Enemy)',
-          value: `**[${attacker.nation_name}](https://politicsandwar.com/nation/id=${attacker.id})**\n` +
-                 `Alliance: ${attacker.alliance?.name || 'None'}\n` +
-                 `Score: ${attacker.score?.toLocaleString() || '?'}`,
+          value: `[${attacker.nation_name}](https://politicsandwar.com/nation/id=${attacker.id}) — ${attacker.alliance?.name || 'No Alliance'} — Score: ${attacker.score?.toLocaleString() || '?'}`,
           inline: true,
         },
         {
@@ -122,8 +115,7 @@ async function sendDefenseAlert(channel, ping, war) {
         },
         {
           name: '🔗 Quick Links',
-          value: `[View War](https://politicsandwar.com/nation/war/timeline/war=${war.id}) | ` +
-                 `[Counter Attacker](https://politicsandwar.com/nation/id=${attacker.id})`,
+          value: `[View War](https://politicsandwar.com/nation/war/timeline/war=${war.id}) | [Counter Attacker](https://politicsandwar.com/nation/id=${attacker.id})`,
           inline: false,
         },
       )
@@ -142,36 +134,41 @@ async function sendDefenseAlert(channel, ping, war) {
 
 async function sendMassAttackAlert(channel, ping, wars) {
   try {
-    const attackerAlliances = [...new Set(wars.map(w => w.attacker?.alliance?.name || 'Unknown'))];
-    const lines = wars.map(w =>
-      `• **[${w.defender.nation_name}](https://politicsandwar.com/nation/id=${w.defender.id})** ← **[${w.attacker.nation_name}](https://politicsandwar.com/nation/id=${w.attacker.id})** (${w.attacker.alliance?.name || 'None'})`
+    const attackerAlliances = [...new Set(
+      wars.map(w => w.attacker?.alliance?.name || 'Unknown')
+    )];
+
+    const memberLines = wars.slice(0, 10).map(w =>
+      `• [${w.defender.nation_name}](https://politicsandwar.com/nation/id=${w.defender.id}) ← [${w.attacker.nation_name}](https://politicsandwar.com/nation/id=${w.attacker.id}) (${w.attacker.alliance?.name || 'None'})`
     );
 
+    // Discord requires field values to be non-empty strings
+    const membersValue = memberLines.length > 0
+      ? memberLines.join('\n') + (wars.length > 10 ? `\n_...and ${wars.length - 10} more_` : '')
+      : 'See war list above';
+
     const embed = new EmbedBuilder()
-      .setTitle(`🚨 MASS ATTACK DETECTED — ${wars.length} Members Hit!`)
+      .setTitle(`🚨 MASS ATTACK — ${wars.length} Members Hit!`)
       .setColor(0xff0000)
       .setDescription(
-        `**${wars.length} alliance members attacked simultaneously!**\n` +
-        `Attacking Alliance(s): **${attackerAlliances.join(', ')}**`
+        `**${wars.length} members attacked simultaneously!**\n` +
+        `Attacking: **${attackerAlliances.join(', ')}**`
       )
       .addFields(
         {
           name: '🛡️ Members Under Attack',
-          value: lines.slice(0, 10).join('\n') + (wars.length > 10 ? `\n_...and ${wars.length - 10} more_` : ''),
+          value: membersValue,
         },
         {
           name: '⚡ Immediate Actions',
-          value: '• `/counter check` — see all members under attack\n' +
-                 '• `/counter find [attacker]` — find counter options\n' +
-                 '• `/blitz create` — coordinate a counter-blitz\n' +
-                 '• `/war defensive` — full defensive war details',
+          value: '`/counter check` — see all under attack\n`/counter find` — find counter options\n`/war defensive` — full details',
         },
       )
       .setFooter({ text: 'PW Defense Bot • Emergency Defense Alert' })
       .setTimestamp();
 
     await channel.send({
-      content: ping ? `${ping} 🚨 **EMERGENCY — MASS ATTACK DETECTED!**` : '🚨 **EMERGENCY — MASS ATTACK!**',
+      content: ping ? `${ping} 🚨 **EMERGENCY — MASS ATTACK!**` : '🚨 **EMERGENCY — MASS ATTACK!**',
       embeds: [embed],
     });
     logger.warn(`Mass attack alert sent — ${wars.length} wars`);
