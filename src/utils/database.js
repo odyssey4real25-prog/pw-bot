@@ -42,6 +42,7 @@ async function connectDatabase() {
 
   addPhase6Tables();
   addPhase7Tables();
+  addPhase9Tables();
   logger.info(`Database ready at: ${DB_PATH}`);
 }
 
@@ -238,7 +239,7 @@ function createTables() {
   logger.info('All database tables ready');
 }
 
-module.exports = { connectDatabase, query, run, queryOne, saveDatabase, addPhase6Tables, addPhase7Tables };
+module.exports = { connectDatabase, query, run, queryOne, saveDatabase, addPhase6Tables, addPhase7Tables, addPhase9Tables };
 
 // NOTE: This function is appended — new tables added in Phase 6
 // Call addPhase6Tables() from connectDatabase if needed,
@@ -294,6 +295,21 @@ function addPhase7Tables() {
         guild_id TEXT NOT NULL,
         data TEXT NOT NULL,
         recorded_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  } catch (err) { /* already exists */ }
+}
+
+function addPhase9Tables() {
+  if (!db) return;
+  try {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS defense_alerts_sent (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        war_id INTEGER NOT NULL,
+        sent_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(guild_id, war_id)
       );
     `);
   } catch (err) { /* already exists */ }

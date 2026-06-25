@@ -1,5 +1,5 @@
 // ============================================================
-// src/commands/admin/help.js — Updated Phase 8
+// src/commands/admin/help.js — Updated Phase 9
 // ============================================================
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
@@ -83,6 +83,10 @@ const COMMAND_CATEGORIES = [
       { cmd: '/compliance view',     desc: 'View current compliance standards' },
       { cmd: '/compliance check',    desc: 'Check which members meet or fail compliance standards' },
       { cmd: '/compliance report',   desc: 'Full compliance report with pass rate and breakdown by category' },
+      { cmd: '/war status',          desc: 'Show all active wars your alliance is involved in right now' },
+      { cmd: '/war defensive',       desc: 'Show all members currently being attacked with enemy military details' },
+      { cmd: '/war offensive',       desc: 'Show all members currently attacking and their targets' },
+      { cmd: '/war check',           desc: 'Check the full war status of any specific nation' },
     ],
   },
   {
@@ -112,8 +116,8 @@ const COMMAND_CATEGORIES = [
 ];
 
 const COMING_SOON = [
-  '🔔  Personal counter-alert DMs when a member is attacked',
-  '📊  Weekly and monthly summary reports',
+  '🔔  Personal counter-alert DMs — get notified when you specifically are attacked',
+  '📊  Weekly and monthly summary reports sent automatically',
   '🏗️  Alliance infrastructure and project tracking',
   '🤖  AI-powered target recommendations based on war history',
 ];

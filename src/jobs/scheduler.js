@@ -7,20 +7,28 @@ const logger = require('../utils/logger');
 const { checkBeigeExits } = require('./beigeJob');
 const { generateDailyReport } = require('./reportJob');
 const { checkMilitaryChanges } = require('../systems/intelligence/militaryMonitor');
+const { checkAllianceDefense } = require('../systems/defense/defenseMonitor');
 
 async function startAllJobs(client) {
   logger.info('Starting background job scheduler...');
 
-  // Run beige check once on startup after 10s delay
+  // Run initial checks 10 seconds after startup
   setTimeout(async () => {
-    logger.info('Running initial beige check on startup...');
+    logger.info('Running startup checks...');
     await checkBeigeExits(client);
+    await checkAllianceDefense(client);
   }, 10000);
 
   // Beige check every 5 minutes
   cron.schedule('*/5 * * * *', async () => {
     logger.debug('⏰ Running beige check...');
     await checkBeigeExits(client);
+  });
+
+  // Defense check every 5 minutes
+  cron.schedule('*/5 * * * *', async () => {
+    logger.debug('🛡️ Running defense check...');
+    await checkAllianceDefense(client);
   });
 
   // Military change detection every 15 minutes
@@ -35,7 +43,7 @@ async function startAllJobs(client) {
     await generateDailyReport(client);
   });
 
-  logger.info('✅ Scheduler running — beige every 5min, military checks every 15min, daily reports at 08:00 UTC');
+  logger.info('✅ Scheduler running — beige/defense every 5min, military every 15min, daily report at 08:00 UTC');
 }
 
 module.exports = { startAllJobs };
