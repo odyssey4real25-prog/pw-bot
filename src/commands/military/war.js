@@ -89,18 +89,27 @@ module.exports = {
       const offWars = allWars.filter(w => String(w.att_alliance_id) === allianceIdStr);
       const defWars = allWars.filter(w => String(w.def_alliance_id) === allianceIdStr);
 
-      // Build safe field values — Discord rejects empty strings
-      const offValue = offWars.length > 0
-        ? offWars.slice(0, 10).map(w =>
-            `• [${safeName(w.attacker?.nation_name)}](https://politicsandwar.com/nation/id=${w.attacker?.id}) → [${safeName(w.defender?.nation_name)}](https://politicsandwar.com/nation/id=${w.defender?.id}) (${safeName(w.defender?.alliance?.name)})`
-          ).join('\n') + (offWars.length > 10 ? `\n_...and ${offWars.length - 10} more_` : '')
-        : '✅ No active offensive wars';
+      // Discord field values max 1024 chars — with 84 wars we must cap early
+      function buildWarList(wars, isOff) {
+        if (wars.length === 0) return isOff ? '✅ No active offensive wars' : '✅ No active defensive wars';
+        const lines = [];
+        for (const w of wars.slice(0, 5)) {
+          const att = safeName(w.attacker?.nation_name);
+          const def = safeName(w.defender?.nation_name);
+          const attId = w.attacker?.id || 0;
+          const defId = w.defender?.id || 0;
+          lines.push(isOff
+            ? `• [${att}](https://politicsandwar.com/nation/id=${attId}) → [${def}](https://politicsandwar.com/nation/id=${defId})`
+            : `• [${def}](https://politicsandwar.com/nation/id=${defId}) ← [${att}](https://politicsandwar.com/nation/id=${attId})`
+          );
+        }
+        if (wars.length > 5) lines.push(`_...and ${wars.length - 5} more. Use /war ${isOff ? 'offensive' : 'defensive'} for full list._`);
+        const result = lines.join('\n');
+        return result.length > 1020 ? result.slice(0, 1017) + '...' : result;
+      }
 
-      const defValue = defWars.length > 0
-        ? defWars.slice(0, 10).map(w =>
-            `• [${safeName(w.defender?.nation_name)}](https://politicsandwar.com/nation/id=${w.defender?.id}) ← [${safeName(w.attacker?.nation_name)}](https://politicsandwar.com/nation/id=${w.attacker?.id}) (${safeName(w.attacker?.alliance?.name)})`
-          ).join('\n') + (defWars.length > 10 ? `\n_...and ${defWars.length - 10} more_` : '')
-        : '✅ No active defensive wars';
+      const offValue = buildWarList(offWars, true);
+      const defValue = buildWarList(defWars, false);
 
       const embed = new EmbedBuilder()
         .setTitle('⚔️ Alliance War Status')
@@ -136,17 +145,18 @@ module.exports = {
         });
       }
 
-      const lines = defWars.slice(0, 15).map(w =>
+      const lines = defWars.slice(0, 5).map(w =>
         `🛡️ **[${safeName(w.defender?.nation_name)}](https://politicsandwar.com/nation/id=${w.defender?.id})** (Score: ${safeScore(w.defender?.score)})\n` +
         `└ Attacked by: **[${safeName(w.attacker?.nation_name)}](https://politicsandwar.com/nation/id=${w.attacker?.id})** — ${safeName(w.attacker?.alliance?.name)}\n` +
         `└ Enemy mil: ✈️ ${safeMil(w.attacker?.aircraft)} | 🚗 ${safeMil(w.attacker?.tanks)} | 🚀 ${safeMil(w.attacker?.missiles)} | ☢️ ${safeMil(w.attacker?.nukes)}\n` +
         `└ [View War](https://politicsandwar.com/nation/war/timeline/war=${w.id})`
       );
 
+      const defDesc = lines.join('\n\n').slice(0, 3900);
       const embed = new EmbedBuilder()
         .setTitle(`🛡️ Members Under Attack — ${defWars.length}`)
         .setColor(0xe74c3c)
-        .setDescription(lines.join('\n\n'))
+        .setDescription(defDesc + (defWars.length > 5 ? `\n\n_Showing 5 of ${defWars.length}. All wars shown in /war status._` : ''))
         .setFooter({ text: 'Use /counter find [attacker] to coordinate counter-attacks' })
         .setTimestamp();
 
@@ -173,17 +183,18 @@ module.exports = {
         });
       }
 
-      const lines = offWars.slice(0, 15).map(w =>
+      const lines = offWars.slice(0, 5).map(w =>
         `⚔️ **[${safeName(w.attacker?.nation_name)}](https://politicsandwar.com/nation/id=${w.attacker?.id})**\n` +
         `└ Attacking: **[${safeName(w.defender?.nation_name)}](https://politicsandwar.com/nation/id=${w.defender?.id})** — ${safeName(w.defender?.alliance?.name)}\n` +
         `└ Target mil: ✈️ ${safeMil(w.defender?.aircraft)} | 🚗 ${safeMil(w.defender?.tanks)} | Score: ${safeScore(w.defender?.score)}\n` +
         `└ Turns left: ${w.turnsleft || '?'} | [View War](https://politicsandwar.com/nation/war/timeline/war=${w.id})`
       );
 
+      const offDesc = lines.join('\n\n').slice(0, 3900);
       const embed = new EmbedBuilder()
         .setTitle(`⚔️ Active Offensive Wars — ${offWars.length}`)
         .setColor(0x3498db)
-        .setDescription(lines.join('\n\n'))
+        .setDescription(offDesc + (offWars.length > 5 ? `\n\n_Showing 5 of ${offWars.length}. Use /war status for overview._` : ''))
         .setTimestamp();
 
       return interaction.editReply({ content: '', embeds: [embed] });
