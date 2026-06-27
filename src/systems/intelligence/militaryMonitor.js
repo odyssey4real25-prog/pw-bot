@@ -34,8 +34,10 @@ async function snapshotEnemyMilitary(guildId) {
         data {
           id
           nation_name
+          num_cities
           alliance_id
           alliance_position
+          alliance { name }
           soldiers
           tanks
           aircraft
@@ -60,6 +62,12 @@ async function snapshotEnemyMilitary(guildId) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [nation.id, nation.soldiers || 0, nation.tanks || 0, nation.aircraft || 0,
        nation.ships || 0, nation.missiles || 0, nation.nukes || 0, nation.score || 0]
+    );
+    // Store nation name/alliance separately for display in alerts
+    run(
+      `INSERT OR REPLACE INTO nation_cache (nation_id, nation_name, alliance_name, num_cities, score, updated_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+      [nation.id, nation.nation_name || '', nation.alliance?.name || '', nation.num_cities || 0, nation.score || 0]
     );
   }
 
@@ -115,6 +123,7 @@ async function processGuildMilitaryChanges(client, guildId) {
 
       if (changes.length === 0) continue;
 
+      const nationInfo = queryOne('SELECT * FROM nation_cache WHERE nation_id = ?', [nation_id]);
       const changeLines = changes.map(c =>
         `${c.emoji} **${c.field}**: ${c.from.toLocaleString()} → ${c.to.toLocaleString()} (${c.diff > 0 ? '+' : ''}${c.diff.toLocaleString()})`
       );
@@ -128,7 +137,7 @@ async function processGuildMilitaryChanges(client, guildId) {
         .setTitle(titleTag)
         .setColor(color)
         .setDescription(
-          `**[Nation ID: ${nation_id}](https://politicsandwar.com/nation/id=${nation_id})**\n\n` +
+          `**[${nationInfo?.nation_name || `Nation ${nation_id}`}](https://politicsandwar.com/nation/id=${nation_id})** — ${nationInfo?.alliance_name || 'Unknown Alliance'} | Cities: ${nationInfo?.num_cities || '?'} | Score: ${Number(nationInfo?.score || 0).toLocaleString()}\n\n` +
           changeLines.join('\n')
         )
         .setFooter({ text: 'PW Defense Bot • Military Intelligence' })

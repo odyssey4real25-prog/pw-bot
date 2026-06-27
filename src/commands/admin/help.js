@@ -1,5 +1,5 @@
 // ============================================================
-// src/commands/admin/help.js — Updated Phase 9
+// src/commands/admin/help.js — Updated Phase 10
 // ============================================================
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
@@ -12,8 +12,8 @@ const COMMAND_CATEGORIES = [
     commands: [
       { cmd: '/config alliance',        desc: 'Set your P&W alliance ID' },
       { cmd: '/config channel beige',   desc: 'Set the channel for beige exit alerts' },
-      { cmd: '/config channel wars',    desc: 'Set the channel for war/defense alerts' },
-      { cmd: '/config channel intel',   desc: 'Set the intel channel (also receives military change alerts and daily reports)' },
+      { cmd: '/config channel wars',    desc: 'Set the channel for war/defense alerts (also receives instant attack alerts)' },
+      { cmd: '/config channel intel',   desc: 'Set the intel channel (military change alerts, daily reports)' },
       { cmd: '/config role military',   desc: 'Set which Discord role = Military Officer' },
       { cmd: '/config role government', desc: 'Set which Discord role = Government' },
       { cmd: '/config view',            desc: 'View all current bot settings' },
@@ -25,8 +25,8 @@ const COMMAND_CATEGORIES = [
     role: '🔒 Military+',
     color: 0xf1c40f,
     commands: [
-      { cmd: '/beige',            desc: 'All enemy nations currently in beige, sorted by expiry' },
-      { cmd: '/alerts beige on',  desc: 'Enable personal DM alerts when beige targets expire' },
+      { cmd: '/beige',            desc: 'All enemy nations currently in beige, sorted by expiry time' },
+      { cmd: '/alerts beige on',  desc: 'Enable personal DM alerts when beige targets are expiring' },
       { cmd: '/alerts beige off', desc: 'Disable personal beige DM alerts' },
       { cmd: '/alerts view',      desc: 'View your current alert settings' },
     ],
@@ -36,7 +36,7 @@ const COMMAND_CATEGORIES = [
     role: '🔒 Military+ (coalition requires Government+)',
     color: 0x3498db,
     commands: [
-      { cmd: '/intel',                    desc: 'Full intelligence dashboard — enemy alliances and watched nations' },
+      { cmd: '/intel',                    desc: 'Intelligence dashboard — enemy alliances, watched nations' },
       { cmd: '/targets',                  desc: 'Recommended attack targets scored and ranked from watchlists' },
       { cmd: '/watch nation add',         desc: 'Watch a nation — name, ID, or P&W link (any case)' },
       { cmd: '/watch nation remove',      desc: 'Remove a nation from the watchlist' },
@@ -47,7 +47,7 @@ const COMMAND_CATEGORIES = [
       { cmd: '/coalition add',            desc: 'Add an alliance to your friendly or enemy coalition' },
       { cmd: '/coalition remove',         desc: 'Remove an alliance from the coalition list' },
       { cmd: '/coalition list',           desc: 'Show all coalition members and enemies' },
-      { cmd: '/coalition compare',        desc: 'Side-by-side military comparison of our coalition vs enemy coalition' },
+      { cmd: '/coalition compare',        desc: 'Side-by-side military comparison: our coalition vs enemy coalition' },
     ],
   },
   {
@@ -55,12 +55,11 @@ const COMMAND_CATEGORIES = [
     role: '🔒 Military+',
     color: 0xe74c3c,
     commands: [
-      { cmd: '/assign create',       desc: 'Assign a target nation to an alliance member' },
+      { cmd: '/assign create',       desc: 'Assign a target to a member — they receive a DM with Accept/Decline buttons' },
       { cmd: '/assign list',         desc: 'View all active target assignments' },
-      { cmd: '/assign mine',         desc: 'View assignments given to you personally' },
-      { cmd: '/assign accept',       desc: 'Accept an assignment given to you' },
+      { cmd: '/assign mine',         desc: 'View your own assignments with one-click Accept buttons' },
       { cmd: '/assign complete',     desc: 'Mark your assignment as completed' },
-      { cmd: '/assign cancel',       desc: 'Cancel an assignment' },
+      { cmd: '/assign cancel',       desc: 'Cancel an assignment — member is DM\'d with the reason' },
       { cmd: '/counter find',        desc: 'Find who can counter-attack a specific enemy nation' },
       { cmd: '/counter assign',      desc: 'Assign a member to counter a specific attacker' },
       { cmd: '/counter check',       desc: 'See which alliance members are currently under attack' },
@@ -83,9 +82,9 @@ const COMMAND_CATEGORIES = [
       { cmd: '/compliance view',     desc: 'View current compliance standards' },
       { cmd: '/compliance check',    desc: 'Check which members meet or fail compliance standards' },
       { cmd: '/compliance report',   desc: 'Full compliance report with pass rate and breakdown by category' },
-      { cmd: '/war status',          desc: 'Show all active wars your alliance is involved in right now' },
-      { cmd: '/war defensive',       desc: 'Show all members currently being attacked with enemy military details' },
-      { cmd: '/war offensive',       desc: 'Show all members currently attacking and their targets' },
+      { cmd: '/war status',          desc: 'Overview of all active wars your alliance is in right now' },
+      { cmd: '/war defensive',       desc: 'Full paginated list of all members currently under attack' },
+      { cmd: '/war offensive',       desc: 'Full paginated list of all members currently attacking' },
       { cmd: '/war check',           desc: 'Check the full war status of any specific nation' },
     ],
   },
@@ -94,14 +93,14 @@ const COMMAND_CATEGORIES = [
     role: '🔒 Military+ (gov-dashboard requires Government+)',
     color: 0x9b59b6,
     commands: [
-      { cmd: '/hq',                        desc: 'Military command dashboard — assignments, beige, reservations' },
+      { cmd: '/hq',                        desc: 'Military command dashboard — assignments, beige exits, reservations' },
       { cmd: '/readiness',                 desc: 'Alliance military readiness — scores every member as a percentage' },
       { cmd: '/health',                    desc: 'Alliance health score — overall grade with strengths and improvements' },
       { cmd: '/gov-dashboard',             desc: 'Government strategic overview — military strength, enemy comparison, ops' },
       { cmd: '/participation leaderboard', desc: 'Leaderboards — most wars, assignments completed, counters done' },
       { cmd: '/participation snapshot',    desc: 'Pull a fresh war activity snapshot from P&W for leaderboards' },
-      { cmd: '/participation inactive',    desc: 'Show members currently with zero offensive wars' },
-      { cmd: '/report daily',              desc: 'Manually send the daily alliance report right now (Government+)' },
+      { cmd: '/participation inactive',    desc: 'Show members with zero offensive wars right now' },
+      { cmd: '/report daily',              desc: 'Manually trigger the daily alliance report now (Government+)' },
     ],
   },
   {
@@ -115,11 +114,12 @@ const COMMAND_CATEGORIES = [
   },
 ];
 
-const COMING_SOON = [
-  '🔔  Personal counter-alert DMs — get notified when you specifically are attacked',
-  '📊  Weekly and monthly summary reports sent automatically',
-  '🏗️  Alliance infrastructure and project tracking',
-  '🤖  AI-powered target recommendations based on war history',
+const AUTOMATIC_FEATURES = [
+  '🆘  **Instant attack alerts** — bot checks every 60 seconds and pings your wars channel the moment a member is attacked',
+  '🚨  **Mass attack detection** — if 3+ members are hit at once, sends an emergency alert automatically',
+  '🟡  **Beige exit alerts** — fires at your configured intervals before enemy nations leave beige',
+  '📈  **Military change alerts** — detects significant enemy military buildups every 15 minutes',
+  '📅  **Daily report** — automatic alliance status report sent to your intel channel at 08:00 UTC',
 ];
 
 module.exports = {
@@ -186,11 +186,10 @@ module.exports = {
       ),
 
       new EmbedBuilder()
-        .setTitle('🚧 Coming Soon')
-        .setColor(0x7f8c8d)
-        .setDescription(COMING_SOON.join('\n'))
-        .setFooter({ text: 'PW Defense Bot • Always improving' })
-        .setTimestamp(),
+        .setTitle('🤖 Automatic Background Features')
+        .setColor(0x1abc9c)
+        .setDescription(AUTOMATIC_FEATURES.join('\n'))
+        .setFooter({ text: 'These run automatically — no commands needed' }),
     ];
 
     return interaction.reply({ embeds, flags: 64 });

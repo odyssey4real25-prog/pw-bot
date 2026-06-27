@@ -43,6 +43,7 @@ async function connectDatabase() {
   addPhase6Tables();
   addPhase7Tables();
   addPhase9Tables();
+  addPhase10Tables();
   logger.info(`Database ready at: ${DB_PATH}`);
 }
 
@@ -239,7 +240,7 @@ function createTables() {
   logger.info('All database tables ready');
 }
 
-module.exports = { connectDatabase, query, run, queryOne, saveDatabase, addPhase6Tables, addPhase7Tables, addPhase9Tables };
+module.exports = { connectDatabase, query, run, queryOne, saveDatabase, addPhase6Tables, addPhase7Tables, addPhase9Tables, addPhase10Tables };
 
 // NOTE: This function is appended — new tables added in Phase 6
 // Call addPhase6Tables() from connectDatabase if needed,
@@ -310,6 +311,22 @@ function addPhase9Tables() {
         war_id INTEGER NOT NULL,
         sent_at TEXT DEFAULT (datetime('now')),
         UNIQUE(guild_id, war_id)
+      );
+    `);
+  } catch (err) { /* already exists */ }
+}
+
+function addPhase10Tables() {
+  if (!db) return;
+  try {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS nation_cache (
+        nation_id INTEGER PRIMARY KEY,
+        nation_name TEXT,
+        alliance_name TEXT,
+        num_cities INTEGER DEFAULT 0,
+        score REAL DEFAULT 0,
+        updated_at TEXT DEFAULT (datetime('now'))
       );
     `);
   } catch (err) { /* already exists */ }
