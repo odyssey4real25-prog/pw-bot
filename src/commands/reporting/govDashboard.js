@@ -8,16 +8,9 @@ const { query, queryOne } = require('../../utils/database');
 const { getAllianceMembers } = require('../../utils/pwApi');
 const { getBeigeTargets } = require('../../systems/beige/beigeTracker');
 
-function scoreReadiness(member) {
-  const STANDARDS = { soldiers: 15000, tanks: 1250, aircraft: 75, ships: 15 };
-  const scores = [
-    Math.min(member.soldiers / STANDARDS.soldiers, 1),
-    Math.min(member.tanks    / STANDARDS.tanks,    1),
-    Math.min(member.aircraft / STANDARDS.aircraft, 1),
-    Math.min(member.ships    / STANDARDS.ships,    1),
-  ];
-  return Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100);
-}
+const { getMilStandards, scoreReadiness: _scoreReadiness } = require('../../utils/milStandards');
+// scoreReadiness is called with guildId-loaded standards inside execute
+function scoreReadiness(member, standards) { return _scoreReadiness(member, standards); }
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -56,7 +49,8 @@ module.exports = {
     const underAttack     = activeMembers.filter(m => (m.defensive_wars_count  || 0) > 0).length;
     const activeAttackers = activeMembers.filter(m => (m.offensive_wars_count  || 0) > 0).length;
 
-    const scored        = activeMembers.map(m => scoreReadiness(m));
+    const _standards    = getMilStandards(guildId);
+    const scored        = activeMembers.map(m => scoreReadiness(m, _standards));
     const avgReadiness  = scored.length > 0 ? Math.round(scored.reduce((a, b) => a + b, 0) / scored.length) : 0;
     const fullyReady    = scored.filter(s => s >= 75).length;
     const lowReadiness  = scored.filter(s => s <  50).length;

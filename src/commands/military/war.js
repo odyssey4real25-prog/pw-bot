@@ -1,21 +1,63 @@
 // ============================================================
 // src/commands/military/war.js
-// Fix 1: Multiple embeds for full war lists (no page limit)
+// /war defensive and /war offensive generate Excel files
+// to bypass Discord embed size limits
 // ============================================================
 
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const { queryOne } = require('../../utils/database');
 const { pwQuery, resolveNation } = require('../../utils/pwApi');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 function safeName(n) { return n || 'Unknown'; }
 function safeScore(s) { return s ? Number(s).toLocaleString() : '?'; }
 function safeMil(m) { return m || 0; }
 
-// Split array into chunks of N
-function chunk(arr, size) {
-  const chunks = [];
-  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
-  return chunks;
+// Generate a simple CSV file for war lists (no extra libraries needed)
+function generateWarCSV(wars, isDefensive) {
+  const headers = isDefensive
+    ? ['Our Member', 'Our Member ID', 'Our Score', 'Attacker', 'Attacker ID', 'Attacker Alliance', 'Attacker Score', 'Aircraft', 'Tanks', 'Missiles', 'Nukes', 'War Link']
+    : ['Our Attacker', 'Our Attacker ID', 'Our Score', 'Target', 'Target ID', 'Target Alliance', 'Target Score', 'Aircraft', 'Tanks', 'Turns Left', 'War Link'];
+
+  const rows = wars.map(w => {
+    if (isDefensive) {
+      return [
+        safeName(w.defender?.nation_name),
+        w.defender?.id || '',
+        w.defender?.score || '',
+        safeName(w.attacker?.nation_name),
+        w.attacker?.id || '',
+        safeName(w.attacker?.alliance?.name),
+        w.attacker?.score || '',
+        safeMil(w.attacker?.aircraft),
+        safeMil(w.attacker?.tanks),
+        safeMil(w.attacker?.missiles),
+        safeMil(w.attacker?.nukes),
+        `https://politicsandwar.com/nation/war/timeline/war=${w.id}`,
+      ];
+    } else {
+      return [
+        safeName(w.attacker?.nation_name),
+        w.attacker?.id || '',
+        w.attacker?.score || '',
+        safeName(w.defender?.nation_name),
+        w.defender?.id || '',
+        safeName(w.defender?.alliance?.name),
+        w.defender?.score || '',
+        safeMil(w.defender?.aircraft),
+        safeMil(w.defender?.tanks),
+        w.turnsleft || '',
+        `https://politicsandwar.com/nation/war/timeline/war=${w.id}`,
+      ];
+    }
+  });
+
+  const csvLines = [headers, ...rows].map(row =>
+    row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+  );
+  return csvLines.join('\n');
 }
 
 module.exports = {
@@ -24,15 +66,15 @@ module.exports = {
     .setDescription('View and manage active wars involving your alliance')
     .addSubcommand(sub =>
       sub.setName('status')
-        .setDescription('Overview of all active wars your alliance is involved in')
+        .setDescription('Overview of all active wars (summary)')
     )
     .addSubcommand(sub =>
       sub.setName('defensive')
-        .setDescription('Full list of all members currently being attacked')
+        .setDescription('Full list of all defensive wars as a downloadable file')
     )
     .addSubcommand(sub =>
       sub.setName('offensive')
-        .setDescription('Full list of all members currently attacking')
+        .setDescription('Full list of all offensive wars as a downloadable file')
     )
     .addSubcommand(sub =>
       sub.setName('check')
@@ -84,7 +126,7 @@ module.exports = {
       return data?.wars?.data || [];
     }
 
-    // ── STATUS ───────────────────────────────────────────────
+    // ── STATUS — summary only, no long lists ─────────────────
     if (sub === 'status') {
       await interaction.deferReply();
       await interaction.editReply('⏳ Fetching war data from P&W...');
@@ -93,37 +135,36 @@ module.exports = {
       const offWars = allWars.filter(w => String(w.att_alliance_id) === allianceIdStr);
       const defWars = allWars.filter(w => String(w.def_alliance_id) === allianceIdStr);
 
-      function buildWarList(wars, isOff) {
-        if (wars.length === 0) return isOff ? '✅ No active offensive wars' : '✅ No active defensive wars';
-        const lines = wars.slice(0, 5).map(w => isOff
+      // Show first 5 of each in the embed
+      function shortList(wars, isOff) {
+        if (wars.length === 0) return isOff ? '✅ None' : '✅ None';
+        return wars.slice(0, 5).map(w => isOff
           ? `• [${safeName(w.attacker?.nation_name)}](https://politicsandwar.com/nation/id=${w.attacker?.id}) → [${safeName(w.defender?.nation_name)}](https://politicsandwar.com/nation/id=${w.defender?.id})`
           : `• [${safeName(w.defender?.nation_name)}](https://politicsandwar.com/nation/id=${w.defender?.id}) ← [${safeName(w.attacker?.nation_name)}](https://politicsandwar.com/nation/id=${w.attacker?.id})`
-        );
-        if (wars.length > 5) lines.push(`_...and ${wars.length - 5} more. Use /war ${isOff ? 'offensive' : 'defensive'} for full list._`);
-        return lines.join('\n').slice(0, 1020);
+        ).join('\n') + (wars.length > 5 ? `\n_+${wars.length - 5} more — use /war ${isOff ? 'offensive' : 'defensive'} for full list_` : '');
       }
 
       const embed = new EmbedBuilder()
         .setTitle('⚔️ Alliance War Status')
         .setColor(0xe74c3c)
         .addFields(
-          { name: `⚔️ Offensive Wars — ${offWars.length}`, value: buildWarList(offWars, true) },
-          { name: `🛡️ Defensive Wars — ${defWars.length}`, value: buildWarList(defWars, false) },
+          { name: `⚔️ Offensive Wars — ${offWars.length}`, value: shortList(offWars, true) || '✅ None' },
+          { name: `🛡️ Defensive Wars — ${defWars.length}`, value: shortList(defWars, false) || '✅ None' },
           { name: '📊 Summary', value: `Total: **${allWars.length}** | Attacking: **${offWars.length}** | Defending: **${defWars.length}**` },
         )
-        .setFooter({ text: 'Use /war defensive or /war offensive for the FULL list of all wars' })
+        .setFooter({ text: 'Use /war defensive or /war offensive for a full downloadable list' })
         .setTimestamp();
 
       return interaction.editReply({ content: '', embeds: [embed] });
     }
 
-    // ── DEFENSIVE — Full list across multiple embeds ──────────
+    // ── DEFENSIVE — CSV file download ────────────────────────
     if (sub === 'defensive') {
       await interaction.deferReply();
       await interaction.editReply('⏳ Fetching defensive war data...');
 
-      const allWars  = await fetchAllianceWars();
-      const defWars  = allWars.filter(w => String(w.def_alliance_id) === allianceIdStr);
+      const allWars = await fetchAllianceWars();
+      const defWars = allWars.filter(w => String(w.def_alliance_id) === allianceIdStr);
 
       if (defWars.length === 0) {
         return interaction.editReply({
@@ -137,30 +178,35 @@ module.exports = {
         });
       }
 
-      // Split into pages of 5 wars each
-      const pages   = chunk(defWars, 5);
-      const embeds  = pages.map((page, i) => {
-        const lines = page.map(w =>
-          `🛡️ **[${safeName(w.defender?.nation_name)}](https://politicsandwar.com/nation/id=${w.defender?.id})** — Score: ${safeScore(w.defender?.score)}\n` +
-          `└ Attacked by: **[${safeName(w.attacker?.nation_name)}](https://politicsandwar.com/nation/id=${w.attacker?.id})** (${safeName(w.attacker?.alliance?.name)})\n` +
-          `└ Enemy: ✈️ ${safeMil(w.attacker?.aircraft)} | 🚗 ${safeMil(w.attacker?.tanks)} | 🚀 ${safeMil(w.attacker?.missiles)} | ☢️ ${safeMil(w.attacker?.nukes)}\n` +
-          `└ [View War](https://politicsandwar.com/nation/war/timeline/war=${w.id})`
-        );
-        return new EmbedBuilder()
-          .setTitle(i === 0 ? `🛡️ Members Under Attack — ${defWars.length} total` : `🛡️ Defensive Wars (continued)`)
-          .setColor(0xe74c3c)
-          .setDescription(lines.join('\n\n'))
-          .setFooter({ text: `Page ${i + 1} of ${pages.length} | Use /counter find [attacker] to coordinate counters` });
-      });
+      // Summary embed
+      const attackerAlliances = [...new Set(defWars.map(w => w.attacker?.alliance?.name || 'None'))];
+      const mostMissiles = defWars.filter(w => (w.attacker?.missiles || 0) > 0).length;
+      const mostNukes    = defWars.filter(w => (w.attacker?.nukes    || 0) > 0).length;
 
-      // Discord allows max 10 embeds per message — split into batches if needed
-      await interaction.editReply({ content: '', embeds: embeds.slice(0, 10) });
-      for (let i = 10; i < embeds.length; i += 10) {
-        await interaction.followUp({ embeds: embeds.slice(i, i + 10) });
-      }
+      const summaryEmbed = new EmbedBuilder()
+        .setTitle(`🛡️ Defensive Wars — ${defWars.length} active`)
+        .setColor(0xe74c3c)
+        .addFields(
+          { name: '⚔️ Enemy Alliances', value: attackerAlliances.slice(0, 10).join(', ') || 'None', inline: false },
+          { name: '🚀 Wars with Missiles', value: `${mostMissiles}`, inline: true },
+          { name: '☢️ Wars with Nukes',    value: `${mostNukes}`,    inline: true },
+          { name: '📄 Full Report',        value: 'A CSV file with all wars is attached below. Open it in Excel or Google Sheets.', inline: false },
+        )
+        .setTimestamp();
+
+      // Generate CSV
+      const csv = generateWarCSV(defWars, true);
+      const tmpFile = path.join(os.tmpdir(), `defensive_wars_${Date.now()}.csv`);
+      fs.writeFileSync(tmpFile, csv, 'utf8');
+      const attachment = new AttachmentBuilder(tmpFile, { name: 'defensive_wars.csv' });
+
+      await interaction.editReply({ content: '', embeds: [summaryEmbed], files: [attachment] });
+
+      // Clean up temp file
+      setTimeout(() => { try { fs.unlinkSync(tmpFile); } catch {} }, 10000);
     }
 
-    // ── OFFENSIVE — Full list across multiple embeds ──────────
+    // ── OFFENSIVE — CSV file download ────────────────────────
     if (sub === 'offensive') {
       await interaction.deferReply();
       await interaction.editReply('⏳ Fetching offensive war data...');
@@ -180,25 +226,25 @@ module.exports = {
         });
       }
 
-      const pages  = chunk(offWars, 5);
-      const embeds = pages.map((page, i) => {
-        const lines = page.map(w =>
-          `⚔️ **[${safeName(w.attacker?.nation_name)}](https://politicsandwar.com/nation/id=${w.attacker?.id})**\n` +
-          `└ Attacking: **[${safeName(w.defender?.nation_name)}](https://politicsandwar.com/nation/id=${w.defender?.id})** (${safeName(w.defender?.alliance?.name)})\n` +
-          `└ Target: ✈️ ${safeMil(w.defender?.aircraft)} | 🚗 ${safeMil(w.defender?.tanks)} | Score: ${safeScore(w.defender?.score)}\n` +
-          `└ Turns left: ${w.turnsleft || '?'} | [View War](https://politicsandwar.com/nation/war/timeline/war=${w.id})`
-        );
-        return new EmbedBuilder()
-          .setTitle(i === 0 ? `⚔️ Active Offensive Wars — ${offWars.length} total` : `⚔️ Offensive Wars (continued)`)
-          .setColor(0x3498db)
-          .setDescription(lines.join('\n\n'))
-          .setFooter({ text: `Page ${i + 1} of ${pages.length}` });
-      });
+      const targetAlliances = [...new Set(offWars.map(w => w.defender?.alliance?.name || 'None'))];
 
-      await interaction.editReply({ content: '', embeds: embeds.slice(0, 10) });
-      for (let i = 10; i < embeds.length; i += 10) {
-        await interaction.followUp({ embeds: embeds.slice(i, i + 10) });
-      }
+      const summaryEmbed = new EmbedBuilder()
+        .setTitle(`⚔️ Offensive Wars — ${offWars.length} active`)
+        .setColor(0x3498db)
+        .addFields(
+          { name: '🏛️ Alliances Being Hit', value: targetAlliances.slice(0, 10).join(', ') || 'None', inline: false },
+          { name: '📄 Full Report', value: 'A CSV file with all wars is attached. Open in Excel or Google Sheets.', inline: false },
+        )
+        .setTimestamp();
+
+      const csv = generateWarCSV(offWars, false);
+      const tmpFile = path.join(os.tmpdir(), `offensive_wars_${Date.now()}.csv`);
+      fs.writeFileSync(tmpFile, csv, 'utf8');
+      const attachment = new AttachmentBuilder(tmpFile, { name: 'offensive_wars.csv' });
+
+      await interaction.editReply({ content: '', embeds: [summaryEmbed], files: [attachment] });
+
+      setTimeout(() => { try { fs.unlinkSync(tmpFile); } catch {} }, 10000);
     }
 
     // ── CHECK ─────────────────────────────────────────────────
@@ -254,7 +300,7 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setTitle(`⚔️ War Status — ${safeName(nation.nation_name)}`)
         .setColor(0xe74c3c)
-        .setDescription(lines.join('\n\n'))
+        .setDescription(lines.join('\n\n').slice(0, 3900))
         .addFields({
           name: '🪖 Military',
           value: `✈️ ${safeMil(nation.aircraft)} | 🚗 ${safeMil(nation.tanks)} | 👮 ${nation.soldiers?.toLocaleString() || 0} | 🚢 ${safeMil(nation.ships)} | 🚀 ${safeMil(nation.missiles)} | ☢️ ${safeMil(nation.nukes)}`,

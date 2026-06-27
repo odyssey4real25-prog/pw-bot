@@ -41,17 +41,10 @@ module.exports = {
     const vacationCount = members.length - activeMembers.length;
 
     // ── SCORE 1: MILITARY READINESS (30 points) ──────────────
-    const MIL_STANDARDS = { soldiers: 15000, tanks: 1250, aircraft: 75, ships: 15 };
+    const { getMilStandards, scoreReadiness } = require('../../utils/milStandards');
+    const MIL_STANDARDS = getMilStandards(guildId);
 
-    const milScores = activeMembers.map(m => {
-      const s = [
-        Math.min(m.soldiers / MIL_STANDARDS.soldiers, 1),
-        Math.min(m.tanks    / MIL_STANDARDS.tanks,    1),
-        Math.min(m.aircraft / MIL_STANDARDS.aircraft, 1),
-        Math.min(m.ships    / MIL_STANDARDS.ships,    1),
-      ];
-      return s.reduce((a, b) => a + b, 0) / s.length;
-    });
+    const milScores = activeMembers.map(m => scoreReadiness(m, MIL_STANDARDS) / 100);
     const avgMilScore = milScores.reduce((a, b) => a + b, 0) / (milScores.length || 1);
     const milPoints   = Math.round(avgMilScore * 30);
 

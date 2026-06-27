@@ -8,16 +8,8 @@ const { getAllianceMembers } = require('../utils/pwApi');
 const { getBeigeTargets } = require('../systems/beige/beigeTracker');
 const logger = require('../utils/logger');
 
-function scoreReadiness(member) {
-  const S = { soldiers: 15000, tanks: 1250, aircraft: 75, ships: 15 };
-  const scores = [
-    Math.min(member.soldiers / S.soldiers, 1),
-    Math.min(member.tanks    / S.tanks,    1),
-    Math.min(member.aircraft / S.aircraft, 1),
-    Math.min(member.ships    / S.ships,    1),
-  ];
-  return Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100);
-}
+const { getMilStandards, scoreReadiness: _sr } = require('../utils/milStandards');
+function scoreReadiness(member, standards) { return _sr(member, standards); }
 
 async function generateDailyReport(client) {
   logger.info('Generating daily reports...');
@@ -42,7 +34,8 @@ async function sendDailyReport(client, guildId, allianceId) {
     const members = await getAllianceMembers(allianceId);
     const active  = members.filter(m => m.vacation_mode_turns === 0);
 
-    const scored       = active.map(m => scoreReadiness(m));
+    const _std         = getMilStandards(guildId);
+    const scored       = active.map(m => scoreReadiness(m, _std));
     const avgReadiness = scored.length > 0 ? Math.round(scored.reduce((a, b) => a + b, 0) / scored.length) : 0;
     const lowCount     = scored.filter(s => s < 50).length;
 

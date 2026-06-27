@@ -3,7 +3,7 @@
 // Detect when alliance members are attacked and assign counters
 // ============================================================
 
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { query, run, queryOne } = require('../../utils/database');
 const { resolveNation, getAllianceMembers, getNationWars } = require('../../utils/pwApi');
 
@@ -125,7 +125,8 @@ module.exports = {
         return interaction.editReply(`❌ Could not find nation **"${input}"**. Try the exact name, ID, or P&W link.`);
       }
 
-      const expiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(); // 3 hours
+      const expiresHours = interaction.options.getInteger('expires') || 6;
+      const expiresAt = new Date(Date.now() + expiresHours * 60 * 60 * 1000).toISOString();
       run(
         `INSERT INTO target_assignments
          (guild_id, target_nation_id, target_nation_name, assigned_to_discord_id,
@@ -137,25 +138,57 @@ module.exports = {
          expiresAt]
       );
 
+      // Get the assignment ID we just created
+      const newAssignment = queryOne(
+        `SELECT id FROM target_assignments WHERE guild_id = ? AND target_nation_id = ? AND assigned_to_discord_id = ? ORDER BY created_at DESC LIMIT 1`,
+        [interaction.guildId, attacker.id, member.id]
+      );
+      const assignmentId = newAssignment?.id;
+
       const embed = new EmbedBuilder()
         .setTitle('🛡️ Counter Assignment Created')
         .setColor(0xe74c3c)
         .addFields(
-          { name: '⚔️ Counter Target', value: `[${attacker.nation_name}](https://politicsandwar.com/nation/id=${attacker.id})`, inline: true },
-          { name: '🏛️ Their Alliance', value: attacker.alliance?.name || 'None', inline: true },
-          { name: '👤 Assigned To', value: `<@${member.id}>`, inline: true },
-          { name: '⭐ Enemy Score', value: attacker.score?.toLocaleString() || '?', inline: true },
-          { name: '🪖 Enemy Military', value: `✈️ ${attacker.aircraft} | 🚗 ${attacker.tanks}`, inline: true },
+          { name: '⚔️ Counter Target',  value: `[${attacker.nation_name}](https://politicsandwar.com/nation/id=${attacker.id})`, inline: true },
+          { name: '🏛️ Their Alliance',  value: attacker.alliance?.name || 'None', inline: true },
+          { name: '👤 Assigned To',     value: `<@${member.id}>`, inline: true },
+          { name: '⭐ Enemy Score',     value: attacker.score?.toLocaleString() || '?', inline: true },
+          { name: '🪖 Enemy Military',  value: `✈️ ${attacker.aircraft || 0} | 🚗 ${attacker.tanks || 0} | 🚀 ${attacker.missiles || 0} | ☢️ ${attacker.nukes || 0}`, inline: true },
         )
-        .setFooter({ text: 'Use /assign accept [id] to confirm' })
+        .setFooter({ text: `Assignment ID: #${assignmentId} | Click a button below to respond` })
         .setTimestamp();
 
       if (notes) embed.addFields({ name: '📝 Notes', value: notes });
 
-      await interaction.editReply({ content: `🛡️ <@${member.id}> — counter assignment!`, embeds: [embed] });
+      // Buttons for Accept / Decline
+      const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`assignment_accept_${assignmentId}`)
+          .setLabel('✅ Accept Counter')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`assignment_decline_${assignmentId}`)
+          .setLabel('❌ Decline')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setLabel('🔗 View Target')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`https://politicsandwar.com/nation/id=${attacker.id}`),
+      );
 
+      await interaction.editReply({
+        content: `🛡️ <@${member.id}> — counter assignment!`,
+        embeds: [embed],
+        components: [buttons],
+      });
+
+      // DM the member WITH buttons
       try {
-        await member.send({ content: `🛡️ You have a counter assignment in **${interaction.guild.name}**!`, embeds: [embed] });
+        await member.send({
+          content: `🛡️ You have a **counter assignment** in **${interaction.guild.name}**! Please accept or decline:`,
+          embeds: [embed],
+          components: [buttons],
+        });
       } catch { /* DMs closed */ }
     }
 

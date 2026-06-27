@@ -8,25 +8,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { queryOne } = require('../../utils/database');
 const { getAllianceMembers } = require('../../utils/pwApi');
 
-// Minimum military standards — configurable in future phase
-const STANDARDS = {
-  soldiers: 15000,
-  tanks: 1250,
-  aircraft: 75,
-  ships: 15,
-};
-
-// Score a single member's readiness as a percentage
-function scoreReadiness(member) {
-  const scores = [
-    Math.min(member.soldiers / STANDARDS.soldiers, 1),
-    Math.min(member.tanks / STANDARDS.tanks, 1),
-    Math.min(member.aircraft / STANDARDS.aircraft, 1),
-    Math.min(member.ships / STANDARDS.ships, 1),
-  ];
-  const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-  return Math.round(avg * 100);
-}
+const { getMilStandards, scoreReadiness } = require('../../utils/milStandards');
 
 // Return a colour based on readiness score
 function readinessColor(score) {
@@ -84,9 +66,10 @@ module.exports = {
     }
 
     // Score every member
+    const STANDARDS = getMilStandards(interaction.guildId);
     const scored = members
-      .filter(m => m.vacation_mode_turns === 0) // Exclude vacation mode
-      .map(m => ({ ...m, readinessScore: scoreReadiness(m) }))
+      .filter(m => m.vacation_mode_turns === 0)
+      .map(m => ({ ...m, readinessScore: scoreReadiness(m, STANDARDS) }))
       .sort((a, b) => a.readinessScore - b.readinessScore); // Lowest first
 
     const vacationCount = members.filter(m => m.vacation_mode_turns > 0).length;
@@ -132,6 +115,7 @@ module.exports = {
             `Tanks: ${STANDARDS.tanks.toLocaleString()}`,
             `Aircraft: ${STANDARDS.aircraft.toLocaleString()}`,
             `Ships: ${STANDARDS.ships.toLocaleString()}`,
+            `(Set via /compliance set)`,
           ].join(' | '),
           inline: false,
         },
