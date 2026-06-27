@@ -94,7 +94,9 @@ const COMMAND_CATEGORIES = [
     color: 0x9b59b6,
     commands: [
       { cmd: '/hq',                        desc: 'Military command dashboard — assignments, beige exits, reservations' },
-      { cmd: '/readiness',                 desc: 'Alliance military readiness — scores every member as a percentage' },
+      { cmd: '/readiness check',              desc: 'Full MMR-based alliance readiness — each nation scored vs its own city capacity' },
+      { cmd: '/readiness nation',              desc: 'Detailed MMR readiness breakdown for a specific member' },
+      { cmd: '/readiness weights',             desc: 'Configure how much units/spies/missiles/nukes/score contribute to the score' },
       { cmd: '/health',                    desc: 'Alliance health score — overall grade with strengths and improvements' },
       { cmd: '/gov-dashboard',             desc: 'Government strategic overview — military strength, enemy comparison, ops' },
       { cmd: '/participation leaderboard', desc: 'Leaderboards — most wars, assignments completed, counters done' },

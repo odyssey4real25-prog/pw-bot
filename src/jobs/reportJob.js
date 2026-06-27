@@ -8,8 +8,8 @@ const { getAllianceMembers } = require('../utils/pwApi');
 const { getBeigeTargets } = require('../systems/beige/beigeTracker');
 const logger = require('../utils/logger');
 
-const { getMilStandards, scoreReadiness: _sr } = require('../utils/milStandards');
-function scoreReadiness(member, standards) { return _sr(member, standards); }
+const { calculateNationReadiness, getReadinessWeights } = require('../utils/mmrCalculator');
+function scoreReadiness(member, weights) { return calculateNationReadiness(member, weights).total; }
 
 async function generateDailyReport(client) {
   logger.info('Generating daily reports...');
@@ -34,8 +34,8 @@ async function sendDailyReport(client, guildId, allianceId) {
     const members = await getAllianceMembers(allianceId);
     const active  = members.filter(m => m.vacation_mode_turns === 0);
 
-    const _std         = getMilStandards(guildId);
-    const scored       = active.map(m => scoreReadiness(m, _std));
+    const _weights     = getReadinessWeights(guildId);
+    const scored       = active.map(m => scoreReadiness(m, _weights));
     const avgReadiness = scored.length > 0 ? Math.round(scored.reduce((a, b) => a + b, 0) / scored.length) : 0;
     const lowCount     = scored.filter(s => s < 50).length;
 
