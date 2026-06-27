@@ -347,19 +347,39 @@ module.exports = {
       });
 
       // Add action buttons for pending assignments
-      const pendingAssignments = assignments.filter(a => a.status === 'assigned');
-      const components = pendingAssignments.length > 0
-        ? [new ActionRowBuilder().addComponents(
-            ...pendingAssignments.slice(0, 5).map(a =>
+      // Build action buttons for pending and accepted assignments
+      const actionableRows = [];
+
+      const pending  = assignments.filter(a => a.status === 'assigned').slice(0, 3);
+      const accepted = assignments.filter(a => a.status === 'accepted').slice(0, 3);
+
+      if (pending.length > 0) {
+        actionableRows.push(
+          new ActionRowBuilder().addComponents(
+            ...pending.map(a =>
               new ButtonBuilder()
                 .setCustomId(`assignment_accept_${a.id}`)
                 .setLabel(`✅ Accept #${a.id}`)
                 .setStyle(ButtonStyle.Success)
             )
-          )]
-        : [];
+          )
+        );
+      }
 
-      return interaction.reply({ embeds, components, flags: 64 });
+      if (accepted.length > 0) {
+        actionableRows.push(
+          new ActionRowBuilder().addComponents(
+            ...accepted.map(a =>
+              new ButtonBuilder()
+                .setCustomId(`assignment_complete_${a.id}`)
+                .setLabel(`🏆 Complete #${a.id}`)
+                .setStyle(ButtonStyle.Primary)
+            )
+          )
+        );
+      }
+
+      return interaction.reply({ embeds, components: actionableRows, flags: 64 });
     }
   },
 };
