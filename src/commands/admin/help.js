@@ -122,6 +122,8 @@ const AUTOMATIC_FEATURES = [
   '🟡  **Beige exit alerts** — fires at your configured intervals before enemy nations leave beige',
   '📈  **Military change alerts** — detects significant enemy military buildups every 15 minutes',
   '📅  **Daily report** — automatic alliance status report sent to your intel channel at 08:00 UTC',
+  '🏖️  **Vacation mode alerts** — notified when watched enemy nations enter or exit vacation mode',
+  '⏰  **War expiry alerts** — warns when your offensive wars are about to expire (12 and 6 turns remaining)',
 ];
 
 module.exports = {
