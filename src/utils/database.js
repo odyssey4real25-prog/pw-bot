@@ -44,6 +44,7 @@ async function connectDatabase() {
   addPhase7Tables();
   addPhase9Tables();
   addPhase10Tables();
+  addPhase12Tables();
   logger.info(`Database ready at: ${DB_PATH}`);
 }
 
@@ -240,7 +241,7 @@ function createTables() {
   logger.info('All database tables ready');
 }
 
-module.exports = { connectDatabase, query, run, queryOne, saveDatabase, addPhase6Tables, addPhase7Tables, addPhase9Tables, addPhase10Tables };
+module.exports = { connectDatabase, query, run, queryOne, saveDatabase, addPhase6Tables, addPhase7Tables, addPhase9Tables, addPhase10Tables, addPhase12Tables };
 
 // NOTE: This function is appended — new tables added in Phase 6
 // Call addPhase6Tables() from connectDatabase if needed,
@@ -327,6 +328,35 @@ function addPhase10Tables() {
         num_cities INTEGER DEFAULT 0,
         score REAL DEFAULT 0,
         updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  } catch (err) { /* already exists */ }
+}
+
+function addPhase12Tables() {
+  if (!db) return;
+  try {
+    // Add war room columns to operations table if they don't exist
+    const cols = ['war_room_category_id', 'war_room_main_id', 'war_room_assign_id', 'war_room_intel_id', 'war_room_results_id'];
+    for (const col of cols) {
+      try {
+        db.run(`ALTER TABLE operations ADD COLUMN ${col} TEXT`);
+      } catch (e) { /* column already exists */ }
+    }
+
+    // Treaty tracking table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS treaties (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        alliance_id INTEGER NOT NULL,
+        alliance_name TEXT,
+        treaty_type TEXT NOT NULL,
+        notes TEXT,
+        added_by TEXT,
+        expires_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(guild_id, alliance_id, treaty_type)
       );
     `);
   } catch (err) { /* already exists */ }

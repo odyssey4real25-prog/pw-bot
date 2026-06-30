@@ -94,6 +94,30 @@ module.exports = {
         .addIntegerOption(opt =>
           opt.setName('id').setDescription('Operation ID').setRequired(true)
         )
+    )
+
+    .addSubcommand(sub =>
+      sub.setName('warroom')
+        .setDescription('Create a dedicated war room (channels) for an operation')
+        .addIntegerOption(opt =>
+          opt.setName('id').setDescription('Operation ID').setRequired(true)
+        )
+    )
+
+    .addSubcommand(sub =>
+      sub.setName('archive')
+        .setDescription('Archive a war room (locks channels, keeps history)')
+        .addIntegerOption(opt =>
+          opt.setName('id').setDescription('Operation ID').setRequired(true)
+        )
+    )
+
+    .addSubcommand(sub =>
+      sub.setName('deleteroom')
+        .setDescription('Permanently delete a war room\'s channels')
+        .addIntegerOption(opt =>
+          opt.setName('id').setDescription('Operation ID').setRequired(true)
+        )
     ),
 
   requiredRole: 'military',
@@ -314,6 +338,84 @@ module.exports = {
 
       if (op.description) embed.addFields({ name: '📋 Objectives', value: op.description });
       return interaction.reply({ embeds: [embed] });
+    }
+
+    // ── WAR ROOM ─────────────────────────────────────────────
+    if (sub === 'warroom') {
+      await interaction.deferReply();
+      const id = interaction.options.getInteger('id');
+      const op = queryOne(`SELECT * FROM operations WHERE id = ? AND guild_id = ?`, [id, interaction.guildId]);
+      if (!op) return interaction.editReply(`❌ Operation #${id} not found.`);
+
+      if (op.war_room_category_id) {
+        const existingCategory = interaction.guild.channels.cache.get(op.war_room_category_id);
+        if (existingCategory) {
+          return interaction.editReply(`⚠️ A war room already exists for **${op.name}**: ${existingCategory}`);
+        }
+      }
+
+      await interaction.editReply('⏳ Creating war room channels...');
+
+      const { createWarRoom } = require('../../systems/military/warRoom');
+      try {
+        const rooms = await createWarRoom(interaction.guild, op.name, id, interaction.user.id);
+
+        const embed = new EmbedBuilder()
+          .setTitle(`🏴 War Room Created — ${op.name}`)
+          .setColor(0x8e44ad)
+          .setDescription(
+            `A dedicated war room has been created for this operation:\n\n` +
+            `📁 Category: **${rooms.category.name}**\n` +
+            `└ ${rooms.mainChannel} — Main coordination\n` +
+            `└ ${rooms.assignChannel} — Target assignments\n` +
+            `└ ${rooms.intelChannel} — Intelligence updates\n` +
+            `└ ${rooms.resultsChannel} — Battle results\n\n` +
+            `Only Military and Government roles can see these channels.`
+          )
+          .setFooter({ text: `Use /operation archive ${id} when finished | /operation deleteroom ${id} to remove` })
+          .setTimestamp();
+
+        return interaction.editReply({ content: '', embeds: [embed] });
+      } catch (err) {
+        return interaction.editReply(`❌ Failed to create war room: ${err.message}\n\nMake sure the bot has "Manage Channels" permission.`);
+      }
+    }
+
+    // ── ARCHIVE WAR ROOM ─────────────────────────────────────
+    if (sub === 'archive') {
+      await interaction.deferReply();
+      const id = interaction.options.getInteger('id');
+      const op = queryOne(`SELECT * FROM operations WHERE id = ? AND guild_id = ?`, [id, interaction.guildId]);
+      if (!op) return interaction.editReply(`❌ Operation #${id} not found.`);
+      if (!op.war_room_category_id) return interaction.editReply(`❌ Operation **${op.name}** has no war room to archive.`);
+
+      const { archiveWarRoom } = require('../../systems/military/warRoom');
+      const success = await archiveWarRoom(interaction.guild, id);
+
+      if (success) {
+        run(`UPDATE operations SET status = 'completed' WHERE id = ?`, [id]);
+        return interaction.editReply(`✅ War room for **${op.name}** has been archived. Channels are locked but history is preserved.`);
+      } else {
+        return interaction.editReply(`❌ Failed to archive war room. Check bot permissions.`);
+      }
+    }
+
+    // ── DELETE WAR ROOM ──────────────────────────────────────
+    if (sub === 'deleteroom') {
+      await interaction.deferReply();
+      const id = interaction.options.getInteger('id');
+      const op = queryOne(`SELECT * FROM operations WHERE id = ? AND guild_id = ?`, [id, interaction.guildId]);
+      if (!op) return interaction.editReply(`❌ Operation #${id} not found.`);
+      if (!op.war_room_category_id) return interaction.editReply(`❌ Operation **${op.name}** has no war room to delete.`);
+
+      const { deleteWarRoom } = require('../../systems/military/warRoom');
+      const success = await deleteWarRoom(interaction.guild, id);
+
+      if (success) {
+        return interaction.editReply(`✅ War room channels for **${op.name}** have been permanently deleted.`);
+      } else {
+        return interaction.editReply(`❌ Failed to delete war room. Check bot permissions.`);
+      }
     }
   },
 };
