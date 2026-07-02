@@ -5,6 +5,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { query, queryOne } = require('../utils/database');
 const { getAllianceMembers } = require('../utils/pwApi');
+const { getAllLinks } = require('../utils/nationLink');
 const { getBeigeTargets } = require('../systems/beige/beigeTracker');
 const logger = require('../utils/logger');
 
@@ -76,6 +77,14 @@ async function sendDailyReport(client, guildId, allianceId) {
           value:
             `Attacking: **${activeAttackers}** | Defending: **${underAttack}** | No Wars: **${noWars}**\n` +
             `Open Offensive Slots: **${totalOffSlots}**`,
+        },
+        {
+          name: '🔗 Nation Links',
+          value: (() => {
+            const links = getAllLinks(guildId);
+            const linkPct = members.length > 0 ? Math.round((links.length / members.length) * 100) : 0;
+            return `${links.length} / ${members.length} members linked (${linkPct}%)${linkPct < 50 ? '\n⚠️ Encourage members to run `/link set`' : ''}`;
+          })(),
         },
         {
           name: '📋 Bot Activity (Last 24h)',

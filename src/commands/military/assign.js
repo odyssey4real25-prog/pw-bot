@@ -9,6 +9,7 @@ const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
 const { query, run, queryOne } = require('../../utils/database');
+const { buildNationToDiscordMap, getLinkedDiscordUser } = require('../../utils/nationLink');
 const { resolveNation } = require('../../utils/pwApi');
 const { checkPermission } = require('../../utils/permissions');
 

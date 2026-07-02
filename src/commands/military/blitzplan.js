@@ -9,6 +9,7 @@ const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
 const { queryOne, run } = require('../../utils/database');
+const { buildNationToDiscordMap } = require('../../utils/nationLink');
 const { resolveAlliance } = require('../../utils/pwApi');
 const { planBlitz, scoreThreat } = require('../../systems/military/blitzPlanner');
 const path = require('path');
@@ -164,6 +165,9 @@ module.exports = {
         })
         .setTimestamp();
 
+      // Build Discord mention map from linked nations
+      const discordMap = buildNationToDiscordMap(interaction.guildId);
+
       // ── EMBED OUTPUT MODE ───────────────────────────────────
       if (outputMode === 'embed') {
         const embeds = [summaryEmbed];
@@ -173,9 +177,11 @@ module.exports = {
         for (const [i, assignment] of top10.entries()) {
           const t = assignment.target;
           const attackerLines = assignment.attackers.length > 0
-            ? assignment.attackers.map(a =>
-                `→ **[${a.nation_name}](https://politicsandwar.com/nation/id=${a.id})** — Score: ${Math.round(a.score).toLocaleString()} | Slots: ${a.openSlots}`
-              ).join('\n')
+            ? assignment.attackers.map(a => {
+                const discordId = discordMap.get(a.id);
+                const mention   = discordId ? ` (<@${discordId}>)` : ' _(not linked)_';
+                return `→ **[${a.nation_name}](https://politicsandwar.com/nation/id=${a.id})**${mention} — Score: ${Math.round(a.score).toLocaleString()} | Slots: ${a.openSlots}`;
+              }).join('\n')
             : '❌ No eligible attackers found in range';
 
           const threatEmoji = t.threatScore >= 80 ? '🔴'
@@ -340,9 +346,16 @@ module.exports = {
 
       let assignmentsCreated = 0;
 
+      // Build Discord ID map from linked nations
+      const { buildNationToDiscordMap } = require('../../utils/nationLink');
+      const discordMap = buildNationToDiscordMap(interaction.guildId);
+
       for (const assignment of plan.assignments) {
         for (const attacker of assignment.attackers) {
-          // We store P&W nation ID in notes since discord ID mapping isn't possible here
+          // Use linked Discord ID if available, otherwise fall back to officer
+          const attackerDiscordId = discordMap.get(attacker.id) || discordMap.get(String(attacker.id)) || interaction.user.id;
+          const isLinked = discordMap.has(attacker.id) || discordMap.has(String(attacker.id));
+
           run(
             `INSERT INTO target_assignments
              (guild_id, target_nation_id, target_nation_name, assigned_to_discord_id,
@@ -352,9 +365,9 @@ module.exports = {
               interaction.guildId,
               assignment.target.id,
               assignment.target.nation_name,
-              interaction.user.id, // placeholder — no Discord ID available from P&W data
+              attackerDiscordId,
               interaction.user.id,
-              `[Blitz: ${blitzName}] Attacker: ${attacker.nation_name} (P&W ID: ${attacker.id})`,
+              `[Blitz: ${blitzName}] Attacker: ${attacker.nation_name} (P&W ID: ${attacker.id})${!isLinked ? ' — NOT LINKED, reassign manually' : ''}`,
               expiresAt,
             ]
           );

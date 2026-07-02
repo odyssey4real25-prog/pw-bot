@@ -6,6 +6,7 @@
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { queryOne, run } = require('../../utils/database');
+const { buildNationToDiscordMap } = require('../../utils/nationLink');
 const { getAllianceMembers } = require('../../utils/pwApi');
 const {
   calculateNationReadiness,
@@ -232,6 +233,9 @@ module.exports = {
       );
 
       // ── MEMBER LIST EMBED ──────────────────────────────────
+      // Build Discord mention map for linked members
+      const discordMap = buildNationToDiscordMap(interaction.guildId);
+
       const toShow = view === 'low'
         ? sorted.filter(m => m.readiness.total < 70)
         : view === 'full' ? sorted : sorted.filter(m => m.readiness.total < 90);
@@ -249,7 +253,7 @@ module.exports = {
             const cap = r.capacity;
             const cities = m.num_cities || 1;
             return (
-              `${readinessEmoji(r.total)} **[${m.nation_name}](https://politicsandwar.com/nation/id=${m.id})** — **${r.total}%** | ${cities} cities\n` +
+              `${readinessEmoji(r.total)} **[${m.nation_name}](https://politicsandwar.com/nation/id=${m.id})**${discordMap.get(m.id) ? ` (<@${discordMap.get(m.id)}>)` : ''} — **${r.total}%** | ${cities} cities\n` +
               `└ 👮 ${(m.soldiers || 0).toLocaleString()}/${cap.maxSoldiers.toLocaleString()} ` +
               `🚗 ${(m.tanks || 0).toLocaleString()}/${cap.maxTanks.toLocaleString()} ` +
               `✈️ ${m.aircraft || 0}/${cap.maxAircraft} ` +

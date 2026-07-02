@@ -131,7 +131,12 @@ const CATEGORIES = {
     role: '✅ Everyone',
     color: 0x2ecc71,
     commands: [
-      { cmd: '/ping',        desc: 'Check if the bot is online and see response times' },
+      { cmd: '/link set',      desc: 'Link your Discord account to your P&W nation — enables mentions and auto-assignment' },
+      { cmd: '/link remove',    desc: 'Unlink your nation from your Discord account' },
+      { cmd: '/link check',     desc: 'Check which nation a Discord member has linked' },
+      { cmd: '/link list',      desc: 'Show all linked members (Military+ only)' },
+      { cmd: '/link admin_set', desc: 'Force-link a nation to a Discord member (Military+ only)' },
+      { cmd: '/ping',           desc: 'Check if the bot is online and see response times' },
       { cmd: '/help',        desc: 'Show this help menu' },
       { cmd: '/help setup',  desc: 'Setup & Configuration commands' },
       { cmd: '/help beige',  desc: 'Beige Tracking commands' },

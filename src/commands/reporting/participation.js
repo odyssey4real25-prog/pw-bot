@@ -5,6 +5,7 @@
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { query, run, queryOne } = require('../../utils/database');
+const { buildNationToDiscordMap } = require('../../utils/nationLink');
 const { getAllianceMembers } = require('../../utils/pwApi');
 
 module.exports = {
@@ -217,6 +218,7 @@ module.exports = {
         return interaction.editReply('❌ Could not fetch data. Try again shortly.');
       }
 
+      const discordMap = buildNationToDiscordMap(guildRow.guild_id || interaction.guildId);
       const inactive = members.filter(m =>
         m.offensive_wars_count === 0 && m.vacation_mode_turns === 0
       );
@@ -234,7 +236,7 @@ module.exports = {
       }
 
       const lines = inactive.map(m =>
-        `• **[${m.nation_name}](https://politicsandwar.com/nation/id=${m.id})** — Score: ${Math.round(m.score).toLocaleString()} | Cities: ${m.num_cities}`
+        `• **[${m.nation_name}](https://politicsandwar.com/nation/id=${m.id})**${discordMap.get(m.id) ? ` <@${discordMap.get(m.id)}>` : ''} — Score: ${Math.round(m.score).toLocaleString()} | Cities: ${m.num_cities}`
       );
 
       const embed = new EmbedBuilder()

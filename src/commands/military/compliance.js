@@ -5,12 +5,13 @@
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { query, run, queryOne } = require('../../utils/database');
+const { buildNationToDiscordMap } = require('../../utils/nationLink');
 const { getAllianceMembers } = require('../../utils/pwApi');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('compliance')
-    .setDescription('Manage and check alliance military compliance standards')
+    .setDescription('Set minimum military thresholds for compliance checks (separate from readiness weights)')
 
     .addSubcommand(sub =>
       sub.setName('set')
@@ -192,6 +193,7 @@ module.exports = {
       }
 
       // Sort non-compliant by score ascending (worst first)
+      const discordMap = buildNationToDiscordMap(interaction.guildId);
       const sorted = [...filtered].sort((a, b) => a.score - b.score);
 
       const lines = sorted.slice(0, 20).map(m => {

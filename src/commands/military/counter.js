@@ -5,6 +5,7 @@
 
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { query, run, queryOne } = require('../../utils/database');
+const { buildNationToDiscordMap } = require('../../utils/nationLink');
 const { resolveNation, getAllianceMembers, getNationWars } = require('../../utils/pwApi');
 
 module.exports = {
@@ -95,11 +96,12 @@ module.exports = {
         )
         .setTimestamp();
 
+      const discordMap = buildNationToDiscordMap(interaction.guildId);
       if (eligible.length === 0) {
         embed.addFields({ name: '❌ Eligible Counters', value: 'No alliance members are currently in range or have open slots.' });
       } else {
         const lines = eligible.slice(0, 10).map(m =>
-          `• **[${m.nation_name}](https://politicsandwar.com/nation/id=${m.id})** — Score: ${Math.round(m.score).toLocaleString()} | ${m.openSlots} slot(s) open`
+          `• **[${m.nation_name}](https://politicsandwar.com/nation/id=${m.id})**${discordMap.get(m.id) ? ` <@${discordMap.get(m.id)}>` : ''} — Score: ${Math.round(m.score).toLocaleString()} | ${m.openSlots} slot(s) open`
         );
         embed.addFields({
           name: `✅ Eligible Counters (${eligible.length})`,

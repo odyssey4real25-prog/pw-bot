@@ -7,6 +7,7 @@
 
 const { EmbedBuilder } = require('discord.js');
 const { query, run, queryOne } = require('../../utils/database');
+const { getLinkedDiscordUser } = require('../../utils/nationLink');
 const { pwQuery } = require('../../utils/pwApi');
 const logger = require('../../utils/logger');
 
@@ -142,8 +143,12 @@ async function sendDefenseAlert(channel, ping, war) {
         .setURL(`https://politicsandwar.com/nation/id=${attacker.id}`),
     );
 
+    // Check if defender has a linked Discord account — mention them too
+    const defenderLink = getLinkedDiscordUser(String(war.def_alliance_id || ''), war.defender?.id);
+    const defenderPing = defenderLink ? ` <@${defenderLink.discord_user_id}>` : '';
+
     await channel.send({
-      content: ping ? `${ping} — 🆘 **${defender.nation_name || 'A member'} is under attack!**` : `🆘 **${defender.nation_name || 'A member'} is under attack!**`,
+      content: (ping ? `${ping}` : '') + `${defenderPing} — 🆘 **${defender.nation_name || 'A member'} is under attack!**`,
       embeds: [embed],
       components: [row],
     });

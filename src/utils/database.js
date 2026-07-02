@@ -45,6 +45,7 @@ async function connectDatabase() {
   addPhase9Tables();
   addPhase10Tables();
   addPhase12Tables();
+  addNationLinksTable();
   logger.info(`Database ready at: ${DB_PATH}`);
 }
 
@@ -241,7 +242,7 @@ function createTables() {
   logger.info('All database tables ready');
 }
 
-module.exports = { connectDatabase, query, run, queryOne, saveDatabase, addPhase6Tables, addPhase7Tables, addPhase9Tables, addPhase10Tables, addPhase12Tables };
+module.exports = { connectDatabase, query, run, queryOne, saveDatabase, addPhase6Tables, addPhase7Tables, addPhase9Tables, addPhase10Tables, addPhase12Tables, addNationLinksTable };
 
 // NOTE: This function is appended — new tables added in Phase 6
 // Call addPhase6Tables() from connectDatabase if needed,
@@ -357,6 +358,27 @@ function addPhase12Tables() {
         expires_at TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         UNIQUE(guild_id, alliance_id, treaty_type)
+      );
+    `);
+  } catch (err) { /* already exists */ }
+}
+
+function addNationLinksTable() {
+  if (!db) return;
+  try {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS nation_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        discord_user_id TEXT NOT NULL,
+        nation_id INTEGER NOT NULL,
+        nation_name TEXT NOT NULL,
+        alliance_id INTEGER,
+        alliance_name TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(guild_id, discord_user_id),
+        UNIQUE(guild_id, nation_id)
       );
     `);
   } catch (err) { /* already exists */ }
